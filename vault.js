@@ -39,8 +39,12 @@ async function loadVaultHandle() {
 
 async function ensureVaultPermission(handle) {
   const options = { mode: "readwrite" };
-  if ((await handle.queryPermission(options)) === "granted") return true;
-  return (await handle.requestPermission(options)) === "granted";
+  try {
+    if ((await handle.queryPermission(options)) === "granted") return true;
+    return (await handle.requestPermission(options)) === "granted";
+  } catch (_e) {
+    return false;
+  }
 }
 
 async function writeNoteToVault(fileName, content) {
@@ -48,11 +52,22 @@ async function writeNoteToVault(fileName, content) {
   if (!vault) throw new Error("NO_VAULT");
   if (!(await ensureVaultPermission(vault))) throw new Error("NO_PERMISSION");
 
-  const folder = await vault.getDirectoryHandle(VAULT_SUBFOLDER, { create: true });
+  const folderName = typeof VAULT_SUBFOLDER !== "undefined" ? VAULT_SUBFOLDER : "AI Chat Handoffs";
+  const folder = await vault.getDirectoryHandle(folderName, { create: true });
   const file = await folder.getFileHandle(fileName, { create: true });
   const writer = await file.createWritable();
   await writer.write(content);
   await writer.close();
 
-  return vault.name + "/" + VAULT_SUBFOLDER + "/" + fileName;
+  return vault.name + "/" + folderName + "/" + fileName;
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    openVaultDb,
+    saveVaultHandle,
+    loadVaultHandle,
+    ensureVaultPermission,
+    writeNoteToVault,
+  };
 }

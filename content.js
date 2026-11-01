@@ -104,6 +104,28 @@ function extractMarkdown(rootEl) {
       return "\n\n```" + lang + "\n" + rawCode + "\n```\n\n";
     }
 
+    // Markdown tables: <table>...</table>
+    if (tag === "table") {
+      const rows = Array.from(node.querySelectorAll("tr"));
+      if (rows.length === 0) return "";
+      const tableLines = [];
+      rows.forEach(function (tr, rowIdx) {
+        const cells = Array.from(tr.querySelectorAll("th, td"));
+        if (cells.length === 0) return;
+        const rowText = "| " + cells.map(function (c) {
+          let cellInner = "";
+          for (const child of c.childNodes) cellInner += walk(child);
+          return cellInner.replace(/\n+/g, " ").replace(/\|/g, "\\|").trim();
+        }).join(" | ") + " |";
+        tableLines.push(rowText);
+        if (rowIdx === 0) {
+          const sep = "| " + cells.map(function () { return "---"; }).join(" | ") + " |";
+          tableLines.push(sep);
+        }
+      });
+      return "\n\n" + tableLines.join("\n") + "\n\n";
+    }
+
     // Inline code: <code>...</code>
     if (tag === "code") {
       const txt = (node.textContent || "").trim();
@@ -117,6 +139,20 @@ function extractMarkdown(rootEl) {
     let inner = "";
     for (const child of node.childNodes) {
       inner += walk(child);
+    }
+
+    // Links: <a href="...">text</a>
+    if (tag === "a") {
+      const href = node.getAttribute("href") || "";
+      const txt = inner.trim();
+      if (!href) return txt;
+      return "[" + (txt || href) + "](" + href + ")";
+    }
+
+    // Blockquotes: <blockquote>...</blockquote>
+    if (tag === "blockquote") {
+      const lines = inner.trim().split("\n").map(function (l) { return "> " + l; }).join("\n");
+      return "\n\n" + lines + "\n\n";
     }
 
     // Headings
@@ -152,11 +188,13 @@ function extractMarkdown(rootEl) {
     }
 
     // Paragraphs and block containers
-    if (tag === "p" || tag === "blockquote" || tag === "section" || tag === "article") {
+    if (tag === "p" || tag === "section" || tag === "article") {
       return "\n\n" + inner.trim() + "\n\n";
     }
+    if (tag === "thead" || tag === "tbody" || tag === "tfoot" || tag === "tr" || tag === "th" || tag === "td") {
+      return inner;
+    }
     if (tag === "div") {
-      // Only add line breaks around block-like divs
       return inner;
     }
 
@@ -300,6 +338,51 @@ const ADAPTERS = [
       "button[aria-label='Stop generating']"
     ],
   },
+
+  /* ----------------------------- DeepSeek ------------------------------ */
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    hosts: ["chat.deepseek.com"],
+    supported: true,
+
+    getMessages: function () {
+      const messages = [];
+      const nodes = Array.from(document.querySelectorAll(
+        "[data-role='user'], [data-role='assistant'], .chat-message, div[class*='chat-message']"
+      ));
+
+      if (nodes.length > 0) {
+        nodes.forEach(function (el) {
+          if (nodes.some(function (other) { return other !== el && other.contains(el); })) return;
+          const isUser = el.matches("[data-role='user'], [class*='user']") ||
+                         !!el.querySelector("[data-role='user'], [class*='user']");
+          const markdownEl = el.querySelector(".ds-markdown, message-content, .markdown") || el;
+          const text = extractMarkdown(markdownEl);
+          if (text) messages.push({ role: isUser ? "user" : "assistant", text: text });
+        });
+      } else {
+        document.querySelectorAll(".ds-markdown").forEach(function (el) {
+          const text = extractMarkdown(el);
+          if (text) messages.push({ role: "assistant", text: text });
+        });
+      }
+      return messages;
+    },
+
+    inputSelectors: ["#chat-input", "textarea.ds-input", "textarea", "div[contenteditable='true']"],
+    sendButtonSelectors: [
+      "div[role='button'][aria-label*='Send']",
+      "button[aria-label*='Send']",
+      "button[type='submit']",
+      "div[class*='send-btn']"
+    ],
+    stopButtonSelectors: [
+      "div[role='button'][aria-label*='Stop']",
+      "button[aria-label*='Stop']",
+      "div[class*='stop-btn']"
+    ],
+  },
 ];
 
 // Sites where we can only FILL the input box (read support not written yet).
@@ -316,7 +399,6 @@ function limitedAdapter(id, name, host) {
   };
 }
 ADAPTERS.push(limitedAdapter("grok", "Grok", "grok.com"));
-ADAPTERS.push(limitedAdapter("deepseek", "DeepSeek", "chat.deepseek.com"));
 ADAPTERS.push(limitedAdapter("copilot", "Copilot", "copilot.microsoft.com"));
 
 // Pick the adapter that matches the website we are currently on.
@@ -644,3 +726,11 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
 
   return true;
 });
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    extractMarkdown,
+    ADAPTERS,
+    pickAdapter,
+  };
+}

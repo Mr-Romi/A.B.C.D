@@ -340,15 +340,15 @@ function cleanMessageText(role, text) {
 
 
 /* ------------------ KEEPING OLDER MESSAGES SAFE ------------------ */
-// Some chat pages only keep the most recent messages on screen. If we simply
-// saved what is on screen, older messages we saved earlier would be lost.
-// This combines what we saved before ("existing") with what is on screen
+// Combines what we saved before ("existing") with what is on screen
 // now ("fresh"):
-//   - If fresh already has all or more messages starting from the same root,
-//     trust fresh.
-//   - Otherwise, find where a SUFFIX of existing matches a PREFIX of fresh,
-//     so we never slice off the tail of existing when an early message like "hi"
-//     happens to repeat later.
+//   - If fresh already has all messages starting from root, trust fresh.
+//   - If fresh is a contiguous sub-window already in existing (e.g. user scrolled up),
+//     keep existing without duplicating.
+//   - If a suffix of existing matches a prefix of fresh (new messages at bottom),
+//     append fresh cleanly.
+//   - If a prefix of existing matches a suffix of fresh (user loaded older messages at top),
+//     prepend fresh cleanly.
 function mergeMessages(existing, fresh) {
   if (!existing || existing.length === 0) return fresh;
   if (!fresh || fresh.length === 0) return existing;
@@ -356,20 +356,31 @@ function mergeMessages(existing, fresh) {
   // Helper: check if two messages match (allowing the very last compared message
   // to have grown while streaming).
   function msgMatches(a, b, isLastItem) {
-    if (a.role !== b.role) return false;
+    if (!a || !b || a.role !== b.role) return false;
     if (a.text === b.text) return true;
     if (isLastItem && (a.text.startsWith(b.text) || b.text.startsWith(a.text))) return true;
     return false;
   }
 
-  // Find a suffix of `existing` (starting at `start` and reaching the end of
-  // `existing`, or where `fresh` completely covers `existing` from `start`)
-  // that matches the prefix of `fresh`.
+  // 1. Check if fresh is fully contained within existing
+  // (e.g. user scrolled UP or virtualized DOM only renders top/middle messages).
+  // Fresh is only an older sub-window if all its messages already match existing exactly.
+  for (let start = 0; start <= existing.length - fresh.length; start++) {
+    let subMatches = true;
+    for (let k = 0; k < fresh.length; k++) {
+      if (!msgMatches(existing[start + k], fresh[k], false)) {
+        subMatches = false;
+        break;
+      }
+    }
+    if (subMatches) {
+      return existing;
+    }
+  }
+
+  // 2. Suffix of existing matches prefix of fresh (scrolling down / new messages arrived).
   for (let start = 0; start < existing.length; start++) {
     const remainingExisting = existing.length - start;
-    // IMPORTANT: if fresh is shorter than remainingExisting, this `start` would
-    // throw away the newer messages at the end of `existing`! Skip it unless
-    // fresh reaches the end of existing.
     if (fresh.length < remainingExisting) continue;
 
     let matches = true;
@@ -385,9 +396,24 @@ function mergeMessages(existing, fresh) {
     }
   }
 
-  // What if the user scrolled UP or the page only rendered a partial window?
-  // If `fresh` is larger than `existing`, trust `fresh`; if `existing` is larger
-  // and no suffix matched, append any genuinely new tail messages from `fresh`.
+  // 3. Suffix of fresh matches prefix of existing (scrolled up and loaded older history at top).
+  for (let freshStart = 0; freshStart < fresh.length; freshStart++) {
+    const freshOverlapLen = fresh.length - freshStart;
+    if (freshOverlapLen > existing.length) continue;
+
+    let matches = true;
+    for (let k = 0; k < freshOverlapLen; k++) {
+      if (!msgMatches(existing[k], fresh[freshStart + k], false)) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return fresh.slice(0, freshStart).concat(existing);
+    }
+  }
+
+  // 4. Fallback: if fresh is longer than existing, trust fresh. Otherwise preserve existing.
   if (fresh.length >= existing.length) return fresh;
 
   const lastExisting = existing[existing.length - 1];
@@ -398,5 +424,31 @@ function mergeMessages(existing, fresh) {
     return existing.slice(0, existing.length - 1).concat(fresh.slice(idxInFresh));
   }
 
-  return existing.concat(fresh);
+  return existing;
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    MAX_HANDOFF_CHARS,
+    RECENT_TAIL_CHARS,
+    VAULT_SUBFOLDER,
+    MAX_SAVED_CHATS,
+    SUMMARY_MARKER,
+    SUMMARY_PROMPT,
+    chatKey,
+    isGenericPath,
+    formatMessage,
+    isSummaryRequestText,
+    isSummaryReplyText,
+    removeSummaryExchange,
+    takeTail,
+    stripObsidianLinks,
+    makeFileName,
+    buildHandoffPrompt,
+    buildObsidianNote,
+    collapseDoubledText,
+    dropRepeatedLines,
+    cleanMessageText,
+    mergeMessages,
+  };
 }

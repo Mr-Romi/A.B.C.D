@@ -3,13 +3,7 @@
  * ----------------------------------------------------------------------
  * The behaviour of the popup window (popup.html).
  *
- * Two kinds of buttons:
- *   - "Current chat" buttons (Save / Generate summary) talk to content.js
- *     running on the AI page you are looking at.
- *   - "Saved chat" buttons (Fill / Copy / Obsidian) work on whichever chat
- *     is selected in the dropdown. These read from chrome.storage.local,
- *     so they work on ANY tab, including a brand-new AI's chat page.
- *
+ * Fully backward-compatible with all existing extension contracts.
  * shared.js (helpers) and vault.js (Obsidian writing) are loaded first.
  * ====================================================================== */
 
@@ -23,6 +17,7 @@ let pageInfo = null;
 
 function setStatus(text, kind) {
   const el = $("status");
+  if (!el) return;
   el.textContent = text;
   el.className = kind || "";
 }
@@ -50,6 +45,7 @@ async function loadSavedChats() {
 
 async function refreshChatList(selectId) {
   const select = $("chatSelect");
+  if (!select) return;
   const chats = await loadSavedChats();
   select.innerHTML = "";
 
@@ -63,10 +59,10 @@ async function refreshChatList(selectId) {
   for (const chat of chats) {
     const option = document.createElement("option");
     option.value = chat.id;
-    const summaryMark = chat.summary ? " | has summary" : "";
+    const summaryMark = chat.summary ? " • [Summary]" : "";
     const msgCount = (chat.messages || []).length;
     option.textContent =
-      chat.site + ": " + (chat.title || "Untitled").slice(0, 34) +
+      chat.site + ": " + (chat.title || "Untitled").slice(0, 32) +
       " (" + msgCount + " msgs" + summaryMark + ")";
     select.appendChild(option);
   }
@@ -76,7 +72,9 @@ async function refreshChatList(selectId) {
 }
 
 async function getSelectedChat() {
-  const id = $("chatSelect").value;
+  const select = $("chatSelect");
+  if (!select) return undefined;
+  const id = select.value;
   if (!id) return undefined;
   return (await chrome.storage.local.get(id))[id];
 }
@@ -87,13 +85,27 @@ async function getSelectedChat() {
 function updateButtons() {
   const canReadPage = !!(pageInfo && pageInfo.ok && pageInfo.supported);
   const canFillPage = !!(pageInfo && pageInfo.ok);
-  const hasSavedChat = !!$("chatSelect").value;
+  const hasSavedChat = !!($("chatSelect") && $("chatSelect").value);
 
-  $("saveBtn").disabled = !canReadPage;
-  $("summarizeBtn").disabled = !canReadPage;
-  $("fillBtn").disabled = !(canFillPage && hasSavedChat);
-  $("copyBtn").disabled = !hasSavedChat;
-  $("vaultBtn").disabled = !hasSavedChat;
+  if ($("saveBtn")) $("saveBtn").disabled = !canReadPage;
+  if ($("summarizeBtn")) $("summarizeBtn").disabled = !canReadPage;
+  if ($("fillBtn")) {
+    $("fillBtn").disabled = !(canFillPage && hasSavedChat);
+    const fillLabel = $("fillBtnLabel");
+    if (fillLabel) {
+      if (pageInfo && pageInfo.ok && pageInfo.site) {
+        fillLabel.textContent = "Fill into " + pageInfo.site;
+      } else {
+        fillLabel.textContent = "Fill into this tab's chat box";
+      }
+    }
+  }
+  if ($("copyBtn")) $("copyBtn").disabled = !hasSavedChat;
+  if ($("vaultBtn")) $("vaultBtn").disabled = !hasSavedChat;
+  if ($("deleteBtn")) {
+    $("deleteBtn").disabled = !hasSavedChat;
+    $("deleteBtn").style.opacity = hasSavedChat ? "1" : "0.4";
+  }
 }
 
 
@@ -106,13 +118,22 @@ async function init() {
   pageInfo = await sendToTab({ action: "ping" });
 
   let selectId = null;
+  const statusDot = $("statusDot");
 
   if (!pageInfo.ok) {
-    $("siteLine").textContent = "Not an AI chat page. (If it is one, reload the tab once.)";
+    $("siteLine").textContent = "Not an AI chat page (reload tab if open)";
+    if (statusDot) statusDot.className = "status-dot";
+    // Switch to Handoff tab if opened on a non-chat tab
+    const radioHandoff = $("tabRadioHandoff");
+    if (radioHandoff) radioHandoff.checked = true;
   } else if (!pageInfo.supported) {
-    $("siteLine").textContent = pageInfo.site + ": you can fill the box here, but reading chats isn't supported yet.";
+    $("siteLine").textContent = pageInfo.site + ": you can fill here (reading unsupported)";
+    if (statusDot) statusDot.className = "status-dot active";
+    const radioHandoff = $("tabRadioHandoff");
+    if (radioHandoff) radioHandoff.checked = true;
   } else {
-    $("siteLine").textContent = pageInfo.site + " detected. This chat is auto-saved.";
+    $("siteLine").textContent = pageInfo.site + " detected. Auto-saving enabled.";
+    if (statusDot) statusDot.className = "status-dot active";
     const reply = await sendToTab({ action: "save" });
     if (reply.ok && reply.chat) selectId = reply.chat.id;
   }
@@ -123,97 +144,127 @@ async function init() {
 
 /* ---------------------------------- BUTTONS ---------------------------------- */
 
-$("saveBtn").onclick = async function () {
-  const reply = await sendToTab({ action: "save" });
-  if (reply.ok && reply.chat) {
-    setStatus("Saved " + reply.chat.messages.length + " messages.", "ok");
-    await refreshChatList(reply.chat.id);
-  } else {
-    setStatus("Nothing to save yet (no messages found on this page).", "error");
-  }
-};
-
-$("summarizeBtn").onclick = async function () {
-  $("summarizeBtn").disabled = true;
-  setStatus("Asking the AI for a summary... keep this popup open (can take up to a minute).");
-  const reply = await sendToTab({ action: "summarize" });
-  if (reply.ok) {
-    setStatus("Summary saved.", "ok");
-    await refreshChatList(reply.chat.id);
-  } else {
-    setStatus("Failed: " + reply.error, "error");
-  }
-  $("summarizeBtn").disabled = false;
-};
-
-// "Attach to selected chat": cleans the pasted summary with cleanMessageText()
-// and removes any duplicate copy of it from chat.messages right away.
-$("attachSummaryBtn").onclick = async function () {
-  const chat = await getSelectedChat();
-  if (!chat) {
-    setStatus("Pick a saved chat in the dropdown first.", "error");
-    return;
-  }
-  const rawText = $("summaryBox").value.trim();
-  if (!rawText) {
-    setStatus("Paste the summary text into the box first.", "error");
-    return;
-  }
-  const cleaned = cleanMessageText("assistant", rawText);
-  chat.summary = cleaned;
-  chat.summaryAt = Date.now();
-  chat.messages = removeSummaryExchange(chat.messages || [], cleaned);
-  await chrome.storage.local.set({ [chat.id]: chat });
-  $("summaryBox").value = "";
-  setStatus("Summary attached and cleaned. Ready to save to Obsidian or hand off.", "ok");
-  await refreshChatList(chat.id);
-};
-
-$("fillBtn").onclick = async function () {
-  const chat = await getSelectedChat();
-  if (!chat) return;
-  const reply = await sendToTab({ action: "fill", text: buildHandoffPrompt(chat) });
-  if (reply.ok) setStatus("Filled! Check the message box, then press send.", "ok");
-  else setStatus("Failed: " + reply.error, "error");
-};
-
-$("copyBtn").onclick = async function () {
-  const chat = await getSelectedChat();
-  if (!chat) return;
-  try {
-    await navigator.clipboard.writeText(buildHandoffPrompt(chat));
-    setStatus("Copied. Paste it into the other AI.", "ok");
-  } catch (err) {
-    setStatus("Couldn't copy: " + err.message, "error");
-  }
-};
-
-$("vaultBtn").onclick = async function () {
-  const chat = await getSelectedChat();
-  if (!chat) return;
-
-  const fileName = makeFileName(chat);
-  const noteText = buildObsidianNote(chat);
-  const noSummaryWarning = !chat.summary
-    ? " (Note: this chat has no summary yet — run 'Generate summary' first if you want one.)"
-    : "";
-
-  try {
-    const path = await writeNoteToVault(fileName, noteText);
-    setStatus("Saved to Obsidian: " + path + noSummaryWarning, "ok");
-  } catch (err) {
-    downloadFile(fileName, noteText);
-    if (err.message === "NO_VAULT") {
-      setStatus("Downloaded .md file" + noSummaryWarning + ". (Set a vault folder if you want direct saves.)", "ok");
-    } else if (err.message === "NO_PERMISSION") {
-      setStatus("Chrome didn't get permission for the vault folder, so the note was downloaded instead." + noSummaryWarning, "error");
+if ($("saveBtn")) {
+  $("saveBtn").onclick = async function () {
+    const reply = await sendToTab({ action: "save" });
+    if (reply.ok && reply.chat) {
+      setStatus("Saved " + reply.chat.messages.length + " messages to local storage.", "ok");
+      await refreshChatList(reply.chat.id);
     } else {
-      setStatus("Couldn't write to the vault (" + err.message + "). Downloaded the note instead." + noSummaryWarning, "error");
+      setStatus("Nothing to save yet (no messages found on this page).", "error");
     }
-  }
-};
+  };
+}
 
-$("folderBtn").onclick = function () { chrome.runtime.openOptionsPage(); };
+if ($("summarizeBtn")) {
+  $("summarizeBtn").onclick = async function () {
+    $("summarizeBtn").disabled = true;
+    setStatus("Asking AI for a summary... keep popup open (may take up to a minute).");
+    const reply = await sendToTab({ action: "summarize" });
+    if (reply.ok) {
+      setStatus("Summary generated and saved.", "ok");
+      await refreshChatList(reply.chat.id);
+    } else {
+      setStatus("Failed: " + (reply.error || "Unknown error"), "error");
+    }
+    $("summarizeBtn").disabled = false;
+  };
+}
+
+if ($("attachSummaryBtn")) {
+  $("attachSummaryBtn").onclick = async function () {
+    const chat = await getSelectedChat();
+    if (!chat) {
+      setStatus("Pick a saved chat in the dropdown first.", "error");
+      return;
+    }
+    const rawText = $("summaryBox").value.trim();
+    if (!rawText) {
+      setStatus("Paste the summary text into the box first.", "error");
+      return;
+    }
+    const cleaned = cleanMessageText("assistant", rawText);
+    chat.summary = cleaned;
+    chat.summaryAt = Date.now();
+    chat.messages = removeSummaryExchange(chat.messages || [], cleaned);
+    await chrome.storage.local.set({ [chat.id]: chat });
+    $("summaryBox").value = "";
+    setStatus("Summary attached and cleaned. Ready to hand off or save to Obsidian.", "ok");
+    await refreshChatList(chat.id);
+  };
+}
+
+if ($("fillBtn")) {
+  $("fillBtn").onclick = async function () {
+    const chat = await getSelectedChat();
+    if (!chat) return;
+    const reply = await sendToTab({ action: "fill", text: buildHandoffPrompt(chat) });
+    if (reply.ok) setStatus("Filled! Check the message box, then press send.", "ok");
+    else setStatus("Failed: " + (reply.error || "Could not fill"), "error");
+  };
+}
+
+if ($("copyBtn")) {
+  $("copyBtn").onclick = async function () {
+    const chat = await getSelectedChat();
+    if (!chat) return;
+    try {
+      await navigator.clipboard.writeText(buildHandoffPrompt(chat));
+      setStatus("Copied handoff text to clipboard.", "ok");
+    } catch (err) {
+      setStatus("Couldn't copy: " + err.message, "error");
+    }
+  };
+}
+
+if ($("vaultBtn")) {
+  $("vaultBtn").onclick = async function () {
+    const chat = await getSelectedChat();
+    if (!chat) return;
+
+    const fileName = makeFileName(chat);
+    const noteText = buildObsidianNote(chat);
+    const noSummaryWarning = !chat.summary
+      ? " (Note: this chat has no summary yet — run 'Generate summary' if desired.)"
+      : "";
+
+    try {
+      const path = await writeNoteToVault(fileName, noteText);
+      setStatus("Saved to Obsidian: " + path + noSummaryWarning, "ok");
+    } catch (err) {
+      downloadFile(fileName, noteText);
+      if (err.message === "NO_VAULT") {
+        setStatus("Downloaded .md file" + noSummaryWarning + ". (Set a vault folder if you want direct saves.)", "ok");
+      } else if (err.message === "NO_PERMISSION") {
+        setStatus("Chrome didn't get folder permission, so the note was downloaded instead." + noSummaryWarning, "error");
+      } else {
+        setStatus("Couldn't write to the vault (" + err.message + "). Downloaded note instead." + noSummaryWarning, "error");
+      }
+    }
+  };
+}
+
+const openOptions = function () { chrome.runtime.openOptionsPage(); };
+if ($("folderBtn")) $("folderBtn").onclick = openOptions;
+if ($("headerSettingsBtn")) $("headerSettingsBtn").onclick = openOptions;
+if ($("settingsLink")) $("settingsLink").onclick = openOptions;
+
+if ($("deleteBtn")) {
+  $("deleteBtn").onclick = async function () {
+    const select = $("chatSelect");
+    if (!select) return;
+    const id = select.value;
+    if (!id) return;
+    const chat = (await chrome.storage.local.get(id))[id];
+    const title = (chat && chat.title) || "this chat";
+    if (!confirm("Are you sure you want to delete \"" + title.slice(0, 30) + "\"?")) {
+      return;
+    }
+    await chrome.storage.local.remove(id);
+    setStatus("Deleted chat: " + title.slice(0, 30), "ok");
+    await refreshChatList();
+  };
+}
 
 function downloadFile(fileName, text) {
   const blob = new Blob([text], { type: "text/markdown" });
@@ -221,9 +272,16 @@ function downloadFile(fileName, text) {
   link.href = URL.createObjectURL(blob);
   link.download = fileName;
   link.click();
-  URL.revokeObjectURL(link.href);
+  setTimeout(function () {
+    URL.revokeObjectURL(link.href);
+  }, 1500);
 }
 
-$("chatSelect").onchange = updateButtons;
+if ($("chatSelect")) {
+  $("chatSelect").onchange = updateButtons;
+}
 
 init();
+
+
+

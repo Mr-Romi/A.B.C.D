@@ -1,66 +1,619 @@
 <!DOCTYPE html>
 <!--
   popup.html
-  The small window that opens when you click the extension icon.
-  It only contains the layout (buttons, a dropdown, a status line).
-  All the behaviour lives in popup.js.
+  Redesigned Chat Handoff extension popup.
+  100% compatible with existing popup.js handlers and IDs.
 -->
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Handoff</title>
   <style>
-    /* Colors are variables so the popup follows your light/dark setting. */
-    :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --accent: #2f6fed; --accent-fg: #ffffff; --soft: #f3f4f6; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #1b1d21; --fg: #e6e8eb; --muted: #9aa3ad; --line: #3a3f46; --accent: #5b8cff; --accent-fg: #0b1020; --soft: #272a30; }
+    :root {
+      --bg: #ffffff;
+      --surface: #f8fafc;
+      --card-bg: #ffffff;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-fg: #ffffff;
+      --accent-soft: #eff6ff;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --danger-soft: #fef2f2;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
     }
-    body { width: 340px; margin: 0; padding: 14px; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
-    h1 { font-size: 15px; margin: 0 0 4px; }
-    .site { color: var(--muted); margin-bottom: 12px; }
-    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
-    button { width: 100%; padding: 8px 10px; margin: 3px 0; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--fg); font: inherit; cursor: pointer; text-align: left; }
-    button:hover:not(:disabled) { border-color: var(--accent); }
-    button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    select { width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
-    #status { margin-top: 12px; padding: 8px; min-height: 18px; border-radius: 6px; background: var(--soft); color: var(--muted); }
-    #status.ok { color: #1a7f37; }
-    #status.error { color: #cf222e; }
-    .link { background: none; border: none; padding: 4px 0; color: var(--accent); width: auto; }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --surface: #1e293b;
+        --card-bg: #1e293b;
+        --fg: #f8fafc;
+        --muted: #94a3b8;
+        --line: #334155;
+        --accent: #3b82f6;
+        --accent-hover: #60a5fa;
+        --accent-fg: #0f172a;
+        --accent-soft: #1e3a8a33;
+        --success: #22c55e;
+        --success-bg: #052e1640;
+        --danger: #ef4444;
+        --danger-hover: #f87171;
+        --danger-soft: #450a0a40;
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 360px;
+      padding: 14px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+      user-select: none;
+    }
+
+    /* Top Brand Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-icon {
+      width: 24px;
+      height: 24px;
+      background: var(--accent);
+      color: var(--accent-fg);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand h1 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .icon-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: var(--muted);
+      cursor: pointer;
+      padding: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .icon-btn:hover {
+      background: var(--surface);
+      border-color: var(--line);
+      color: var(--fg);
+    }
+
+    /* Live Site Status Pill */
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .status-dot.active {
+      background: var(--success);
+      box-shadow: 0 0 0 3px var(--success-bg);
+    }
+
+    .site-text {
+      color: var(--fg);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    /* CSS Tabs: Zero JS dependency so unmodified popup.js still switches tabs */
+    .tab-radio {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 2px;
+      margin-bottom: 12px;
+      gap: 2px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border-radius: calc(var(--radius-md) - 2px);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+
+    #tabRadioCurrent:checked ~ .tabs label[for="tabRadioCurrent"],
+    #tabRadioHandoff:checked ~ .tabs label[for="tabRadioHandoff"] {
+      background: var(--card-bg);
+      color: var(--fg);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    #tabRadioCurrent:checked ~ #tabCurrent,
+    #tabRadioHandoff:checked ~ #tabHandoff {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 12px;
+      margin-bottom: 10px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--fg);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      text-align: center;
+      font-family: inherit;
+    }
+
+    .btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      border-color: var(--line);
+      background: var(--surface);
+      color: var(--muted);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-fg);
+      font-weight: 600;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      color: var(--accent-fg);
+    }
+
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .btn-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .btn-text-content {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .btn-sub {
+      font-size: 11px;
+      font-weight: 400;
+      opacity: 0.8;
+      margin-top: 1px;
+    }
+
+    .link {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--accent);
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: inherit;
+    }
+
+    .link:hover {
+      text-decoration: underline;
+    }
+
+    .link.danger {
+      color: var(--danger);
+    }
+
+    .link.danger:hover {
+      color: var(--danger-hover);
+    }
+
+    /* Select */
+    .select-wrap {
+      position: relative;
+      margin-bottom: 8px;
+    }
+
+    select {
+      width: 100%;
+      padding: 9px 30px 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--fg);
+      font-size: 12px;
+      font-weight: 500;
+      outline: none;
+      appearance: none;
+      cursor: pointer;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+      font-family: inherit;
+    }
+
+    select:focus {
+      border-color: var(--accent);
+    }
+
+    .select-arrow {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: var(--muted);
+      display: flex;
+    }
+
+    /* Accordion */
+    details {
+      margin-top: 4px;
+      border-radius: var(--radius-md);
+    }
+
+    summary {
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 6px 0;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary:hover {
+      color: var(--fg);
+    }
+
+    textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--fg);
+      font-family: inherit;
+      font-size: 12px;
+      resize: vertical;
+      outline: none;
+      margin-top: 6px;
+      margin-bottom: 6px;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+    }
+
+    /* Status Notifications: Compatible with setStatus(text, kind) */
+    #status {
+      display: block;
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-md);
+      font-size: 12px;
+      line-height: 1.4;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      word-break: break-word;
+    }
+
+    #status:empty {
+      display: none;
+    }
+
+    #status.ok {
+      background: var(--success-bg);
+      border-color: var(--success);
+      color: var(--success);
+      display: block;
+    }
+
+    #status.error {
+      background: var(--danger-soft);
+      border-color: var(--danger);
+      color: var(--danger);
+      display: block;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      font-size: 11px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
-  <h1>Chat Handoff</h1>
-  <div class="site" id="siteLine">Checking this page...</div>
 
-  <!-- STEP 1: things that act on the chat you are looking at right now -->
-  <h2>1. Current chat (while you still have room)</h2>
-  <button id="saveBtn">Save transcript now</button>
-  <button id="summarizeBtn">Generate summary (uses 1 message)</button>
+  <!-- Hidden radios for CSS-only tab switching -->
+  <input type="radio" name="tab-selection" id="tabRadioCurrent" class="tab-radio" checked>
+  <input type="radio" name="tab-selection" id="tabRadioHandoff" class="tab-radio">
 
-  <!-- STEP 2: pick which saved chat you want to move to another AI -->
-  <h2>2. Saved chat to hand off</h2>
-  <select id="chatSelect"></select>
+  <!-- Top Header -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+        </svg>
+      </div>
+      <h1>Chat Handoff</h1>
+    </div>
+    <div class="header-actions">
+      <button id="headerSettingsBtn" class="icon-btn" title="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
 
-  <!-- Backup route: if the automatic summary doesn't work, copy the AI's
-       summary reply yourself, paste it here, and attach it to the chat above. -->
-  <details style="margin-top:6px">
-    <summary style="cursor:pointer;color:var(--muted)">Paste a summary manually</summary>
-    <textarea id="summaryBox" rows="5" placeholder="Paste the AI's summary here..."
-      style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit"></textarea>
-    <button id="attachSummaryBtn">Attach to selected chat</button>
-  </details>
+  <!-- Live Page Status Banner -->
+  <div class="status-pill">
+    <div id="statusDot" class="status-dot"></div>
+    <div class="site-text" id="siteLine">Checking this page...</div>
+  </div>
 
-  <!-- STEP 3: use that saved chat -->
-  <h2>3. Continue somewhere else</h2>
-  <button id="fillBtn" class="primary">Fill into THIS tab's message box</button>
-  <button id="copyBtn">Copy handoff text</button>
-  <button id="vaultBtn">Save note to Obsidian vault</button>
-  <button id="folderBtn" class="link">Choose Obsidian vault folder...</button>
+  <!-- Tabs Navigation (CSS-driven via labels) -->
+  <div class="tabs">
+    <label for="tabRadioCurrent" class="tab-btn" id="tabCurrentBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+      Current Tab
+    </label>
+    <label for="tabRadioHandoff" class="tab-btn" id="tabHandoffBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <polyline points="9 21 3 21 3 15"></polyline>
+        <line x1="21" y1="3" x2="14" y2="10"></line>
+        <line x1="3" y1="21" x2="10" y2="14"></line>
+      </svg>
+      Saved & Handoff
+    </label>
+  </div>
 
+  <!-- TAB 1: Current Chat -->
+  <div class="tab-content" id="tabCurrent">
+    <div class="card">
+      <div class="card-title">
+        <span>Capture & AI Summary</span>
+      </div>
+      <div class="btn-stack">
+        <button id="summarizeBtn" class="btn btn-primary" style="justify-content: flex-start;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+          </svg>
+          <div class="btn-text-content">
+            <span>Generate Handoff Summary</span>
+            <span class="btn-sub">Prompts AI to compress context (uses 1 msg)</span>
+          </div>
+        </button>
+
+        <button id="saveBtn" class="btn" style="justify-content: flex-start;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <div class="btn-text-content">
+            <span>Save Transcript Now</span>
+            <span class="btn-sub">Snapshot full conversation to local storage</span>
+          </div>
+        </button>
+      </div>
+
+      <details style="margin-top: 10px;">
+        <summary>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+          Paste a summary manually
+        </summary>
+        <textarea id="summaryBox" rows="4" placeholder="Paste the AI's summary text here..."></textarea>
+        <button id="attachSummaryBtn" class="btn" style="font-size: 12px; padding: 6px 10px;">
+          Attach to Selected Chat
+        </button>
+      </details>
+    </div>
+  </div>
+
+  <!-- TAB 2: Saved & Handoff -->
+  <div class="tab-content" id="tabHandoff">
+    <div class="card">
+      <div class="card-title">
+        <span>Select Saved Chat</span>
+        <button id="deleteBtn" class="link danger" title="Delete selected chat">Delete</button>
+      </div>
+
+      <div class="select-wrap">
+        <select id="chatSelect"></select>
+        <div class="select-arrow">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Continue Somewhere Else</span>
+      </div>
+
+      <button id="fillBtn" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+        <span id="fillBtnLabel">Fill into this tab's chat box</span>
+      </button>
+
+      <div class="btn-grid">
+        <button id="copyBtn" class="btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy Prompt
+        </button>
+
+        <button id="vaultBtn" class="btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          Save to Vault
+        </button>
+      </div>
+
+      <div style="margin-top: 8px; text-align: right;">
+        <button id="folderBtn" class="link">Choose Obsidian vault folder...</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Notification: Matches original setStatus(text, kind) -->
   <div id="status"></div>
 
-  <!-- shared.js and vault.js must come BEFORE popup.js (popup.js uses them). -->
+  <!-- Footer -->
+  <div class="footer">
+    <span>Private & local storage</span>
+    <button id="settingsLink" class="link">Vault settings &rarr;</button>
+  </div>
+
   <script src="shared.js"></script>
   <script src="vault.js"></script>
   <script src="popup.js"></script>
