@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Chat Handoff",
+  "version": "1.0.0",
+  "description": "Auto-saves your AI chats locally, summarizes them, and lets you continue the conversation in another AI when you hit a limit.",
+
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "clipboardWrite"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://grok.com/*",
+        "https://chat.deepseek.com/*",
+        "https://copilot.microsoft.com/*"
+      ],
+      "js": ["shared.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Chat Handoff"
+  },
+
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}

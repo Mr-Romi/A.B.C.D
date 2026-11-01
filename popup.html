@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!--
+  popup.html
+  The small window that opens when you click the extension icon.
+  It only contains the layout (buttons, a dropdown, a status line).
+  All the behaviour lives in popup.js.
+-->
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    /* Colors are variables so the popup follows your light/dark setting. */
+    :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --accent: #2f6fed; --accent-fg: #ffffff; --soft: #f3f4f6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1b1d21; --fg: #e6e8eb; --muted: #9aa3ad; --line: #3a3f46; --accent: #5b8cff; --accent-fg: #0b1020; --soft: #272a30; }
+    }
+    body { width: 340px; margin: 0; padding: 14px; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
+    h1 { font-size: 15px; margin: 0 0 4px; }
+    .site { color: var(--muted); margin-bottom: 12px; }
+    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+    button { width: 100%; padding: 8px 10px; margin: 3px 0; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--fg); font: inherit; cursor: pointer; text-align: left; }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    select { width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+    #status { margin-top: 12px; padding: 8px; min-height: 18px; border-radius: 6px; background: var(--soft); color: var(--muted); }
+    #status.ok { color: #1a7f37; }
+    #status.error { color: #cf222e; }
+    .link { background: none; border: none; padding: 4px 0; color: var(--accent); width: auto; }
+  </style>
+</head>
+<body>
+  <h1>Chat Handoff</h1>
+  <div class="site" id="siteLine">Checking this page...</div>
+
+  <!-- STEP 1: things that act on the chat you are looking at right now -->
+  <h2>1. Current chat (while you still have room)</h2>
+  <button id="saveBtn">Save transcript now</button>
+  <button id="summarizeBtn">Generate summary (uses 1 message)</button>
+
+  <!-- STEP 2: pick which saved chat you want to move to another AI -->
+  <h2>2. Saved chat to hand off</h2>
+  <select id="chatSelect"></select>
+
+  <!-- Backup route: if the automatic summary doesn't work, copy the AI's
+       summary reply yourself, paste it here, and attach it to the chat above. -->
+  <details style="margin-top:6px">
+    <summary style="cursor:pointer;color:var(--muted)">Paste a summary manually</summary>
+    <textarea id="summaryBox" rows="5" placeholder="Paste the AI's summary here..."
+      style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit"></textarea>
+    <button id="attachSummaryBtn">Attach to selected chat</button>
+  </details>
+
+  <!-- STEP 3: use that saved chat -->
+  <h2>3. Continue somewhere else</h2>
+  <button id="fillBtn" class="primary">Fill into THIS tab's message box</button>
+  <button id="copyBtn">Copy handoff text</button>
+  <button id="vaultBtn">Save note to Obsidian vault</button>
+  <button id="folderBtn" class="link">Choose Obsidian vault folder...</button>
+
+  <div id="status"></div>
+
+  <!-- shared.js and vault.js must come BEFORE popup.js (popup.js uses them). -->
+  <script src="shared.js"></script>
+  <script src="vault.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

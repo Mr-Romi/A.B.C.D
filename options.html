@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!--
+  options.html
+  The settings page. Opened from the popup ("Choose Obsidian vault folder...")
+  or from chrome://extensions -> Chat Handoff -> Details -> Extension options.
+  Its only job: let you pick your Obsidian vault folder once.
+-->
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Chat Handoff - Settings</title>
+  <style>
+    :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --accent: #2f6fed; --accent-fg: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1b1d21; --fg: #e6e8eb; --muted: #9aa3ad; --line: #3a3f46; --accent: #5b8cff; --accent-fg: #0b1020; }
+    }
+    body { max-width: 560px; margin: 40px auto; padding: 0 16px; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+    h1 { font-size: 20px; }
+    button { padding: 10px 16px; border: 0; border-radius: 6px; background: var(--accent); color: var(--accent-fg); font: inherit; cursor: pointer; }
+    .box { margin: 20px 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    #result { margin-top: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Chat Handoff - Settings</h1>
+
+  <div class="box">
+    <p><strong>Obsidian vault folder</strong></p>
+    <p class="muted">
+      Choose the main folder of your Obsidian vault (the one that contains a hidden
+      <code>.obsidian</code> folder). Notes are saved into a sub-folder called
+      <code>AI Chat Handoffs</code>, which is created automatically.
+      Chrome will ask you to confirm that this extension may edit files in it.
+    </p>
+    <button id="pickBtn">Choose vault folder...</button>
+    <div id="result">Checking...</div>
+  </div>
+
+  <p class="muted">Everything stays on your computer. Nothing is uploaded anywhere.</p>
+
+  <script src="shared.js"></script>
+  <script src="vault.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
