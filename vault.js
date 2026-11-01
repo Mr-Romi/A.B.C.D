@@ -23,7 +23,7 @@ async function saveVaultHandle(handle) {
   return new Promise(function (resolve, reject) {
     const tx = db.transaction(VAULT_STORE, "readwrite");
     tx.objectStore(VAULT_STORE).put(handle, VAULT_KEY);
-    tx.oncomplete = function () { resolve(); };
+    tx.oncomplete = function () { db.close(); resolve(); };
     tx.onerror = function () { reject(tx.error); };
   });
 }
@@ -32,7 +32,7 @@ async function loadVaultHandle() {
   const db = await openVaultDb();
   return new Promise(function (resolve, reject) {
     const request = db.transaction(VAULT_STORE, "readonly").objectStore(VAULT_STORE).get(VAULT_KEY);
-    request.onsuccess = function () { resolve(request.result); };
+    request.onsuccess = function () { db.close(); resolve(request.result); };
     request.onerror = function () { reject(request.error); };
   });
 }
@@ -52,22 +52,11 @@ async function writeNoteToVault(fileName, content) {
   if (!vault) throw new Error("NO_VAULT");
   if (!(await ensureVaultPermission(vault))) throw new Error("NO_PERMISSION");
 
-  const folderName = typeof VAULT_SUBFOLDER !== "undefined" ? VAULT_SUBFOLDER : "AI Chat Handoffs";
-  const folder = await vault.getDirectoryHandle(folderName, { create: true });
+  const folder = await vault.getDirectoryHandle(VAULT_SUBFOLDER, { create: true });
   const file = await folder.getFileHandle(fileName, { create: true });
   const writer = await file.createWritable();
   await writer.write(content);
   await writer.close();
 
-  return vault.name + "/" + folderName + "/" + fileName;
-}
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    openVaultDb,
-    saveVaultHandle,
-    loadVaultHandle,
-    ensureVaultPermission,
-    writeNoteToVault,
-  };
+  return vault.name + "/" + VAULT_SUBFOLDER + "/" + fileName;
 }

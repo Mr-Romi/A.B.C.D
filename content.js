@@ -53,13 +53,20 @@ function findVisible(selectors) {
   return null;
 }
 
-// Same idea but doesn't care whether the element is visible.
-function findAny(selectors) {
-  for (const selector of selectors) {
-    const el = document.querySelector(selector);
-    if (el) return el;
+// SECURITY: decides whether a link from the page may be saved. Only http(s) and
+// mailto links survive (as absolute URLs). javascript:, data:, file: and the
+// like are dropped, so a hostile AI reply can't plant a clickable script link
+// in your saved notes. Returns "" when the link should be reduced to plain text.
+function safeHref(rawHref) {
+  if (!rawHref || rawHref.startsWith("#")) return "";
+  try {
+    const url = new URL(rawHref, location.href);
+    if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "mailto:") return "";
+    // Parentheses and spaces would break the Markdown link syntax.
+    return url.href.replace(/\(/g, "%28").replace(/\)/g, "%29").replace(/\s/g, "%20");
+  } catch (e) {
+    return "";
   }
-  return null;
 }
 
 // Converts a DOM element into clean Markdown so headings (#), bold (**),
@@ -80,10 +87,7 @@ function extractMarkdown(rootEl) {
     "details", // collapsible thinking/tool steps in Claude
     "follow-up-questions", ".follow-up-questions", "[class*='follow-up']"
   ];
-  clone.querySelectorAll(junkSelectors.join(", ")).forEach(function (el) {
-    // Keep <details> only if it actually holds user-written content, otherwise remove tool/thinking steps
-    el.remove();
-  });
+  clone.querySelectorAll(junkSelectors.join(", ")).forEach(function (el) { el.remove(); });
 
   function walk(node) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -143,7 +147,7 @@ function extractMarkdown(rootEl) {
 
     // Links: <a href="...">text</a>
     if (tag === "a") {
-      const href = node.getAttribute("href") || "";
+      const href = safeHref(node.getAttribute("href"));
       const txt = inner.trim();
       if (!href) return txt;
       return "[" + (txt || href) + "](" + href + ")";
@@ -191,13 +195,8 @@ function extractMarkdown(rootEl) {
     if (tag === "p" || tag === "section" || tag === "article") {
       return "\n\n" + inner.trim() + "\n\n";
     }
-    if (tag === "thead" || tag === "tbody" || tag === "tfoot" || tag === "tr" || tag === "th" || tag === "td") {
-      return inner;
-    }
-    if (tag === "div") {
-      return inner;
-    }
 
+    // Everything else (div, span, table parts, ...): keep only the text inside.
     return inner;
   }
 
@@ -267,14 +266,11 @@ const ADAPTERS = [
       ].join(", ");
 
       const both = userSel + ", " + assistantSel;
-      const nodes = Array.from(document.querySelectorAll(both));
 
-      nodes.forEach(function (el) {
-        // Skip if this node is inside ANOTHER matched node (prevents duplicates
+      document.querySelectorAll(both).forEach(function (el) {
+        // Skip if this node sits inside ANOTHER matched node (prevents duplicates
         // when a wrapper and its inner container both match).
-        if (nodes.some(function (other) { return other !== el && other.contains(el); })) {
-          return;
-        }
+        if (el.parentElement && el.parentElement.closest(both)) return;
         const isUser = el.matches(userSel);
         const text = extractMarkdown(el);
         if (text) messages.push({ role: isUser ? "user" : "assistant", text: text });
@@ -348,13 +344,12 @@ const ADAPTERS = [
 
     getMessages: function () {
       const messages = [];
-      const nodes = Array.from(document.querySelectorAll(
-        "[data-role='user'], [data-role='assistant'], .chat-message, div[class*='chat-message']"
-      ));
+      const messageSel = "[data-role='user'], [data-role='assistant'], .chat-message, div[class*='chat-message']";
+      const nodes = document.querySelectorAll(messageSel);
 
       if (nodes.length > 0) {
         nodes.forEach(function (el) {
-          if (nodes.some(function (other) { return other !== el && other.contains(el); })) return;
+          if (el.parentElement && el.parentElement.closest(messageSel)) return;
           const isUser = el.matches("[data-role='user'], [class*='user']") ||
                          !!el.querySelector("[data-role='user'], [class*='user']");
           const markdownEl = el.querySelector(".ds-markdown, message-content, .markdown") || el;
@@ -486,6 +481,7 @@ async function saveCurrentChat(newSummaryText) {
       }
     }
     lastActiveKey = key;
+    const isNewChat = !existing; // only a NEW chat record can push us over the storage limit
 
     const summaryText = newSummaryText
       ? cleanMessageText("assistant", newSummaryText)
@@ -530,7 +526,7 @@ async function saveCurrentChat(newSummaryText) {
     }
 
     await chrome.storage.local.set({ [key]: chat });
-    await pruneOldChats();
+    if (isNewChat) await pruneOldChats();
     return chat;
   } catch (err) {
     const msg = String((err && err.message) || err);
@@ -680,7 +676,10 @@ async function generateSummary() {
  * SECTION 6: TALKING TO THE POPUP
  * ====================================================================== */
 
-chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
+chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+  // SECURITY: only accept messages sent by this extension's own popup.
+  if (sender.id !== chrome.runtime.id) return false;
+
   (async function () {
     try {
       if (!ADAPTER) {
@@ -726,11 +725,3 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
 
   return true;
 });
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    extractMarkdown,
-    ADAPTERS,
-    pickAdapter,
-  };
-}

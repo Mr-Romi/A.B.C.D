@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chat Handoff",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Auto-saves your AI chats locally, summarizes them, and lets you continue the conversation in another AI when you hit a limit.",
 
   "icons": {
@@ -12,8 +12,7 @@
 
   "permissions": [
     "storage",
-    "unlimitedStorage",
-    "clipboardWrite"
+    "unlimitedStorage"
   ],
 
   "content_scripts": [
