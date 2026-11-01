@@ -463,7 +463,7 @@ async function saveCurrentChat(newSummaryText) {
       if (pageObserver) pageObserver.disconnect();
       if (!warnedAboutOldCopy) {
         warnedAboutOldCopy = true;
-        console.info("[Chat Handoff] This tab is running an old copy of the extension. Reload the page (F5) to fix it.");
+        console.info("[A.B.C.D] This tab is running an old copy of the extension. Reload the page (F5) to fix it.");
       }
       return null;
     }
@@ -537,11 +537,11 @@ async function saveCurrentChat(newSummaryText) {
       if (pageObserver) pageObserver.disconnect();
       if (!warnedAboutOldCopy) {
         warnedAboutOldCopy = true;
-        console.info("[Chat Handoff] Extension was updated. Press F5 on this tab to use the new version.");
+        console.info("[A.B.C.D] Extension was updated. Press F5 on this tab to use the new version.");
       }
       return null;
     }
-    console.info("[Chat Handoff] could not save: " + msg);
+    console.info("[A.B.C.D] could not save: " + msg);
     return null;
   }
 }

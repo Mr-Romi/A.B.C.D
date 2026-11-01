@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Chat Handoff",
+  "name": "A.B.C.D",
   "version": "1.2.1",
   "description": "Auto-saves your AI chats locally, summarizes them, and lets you continue the conversation in another AI when you hit a limit.",
 
@@ -33,7 +33,7 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Chat Handoff",
+    "default_title": "A.B.C.D",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

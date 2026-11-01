@@ -1,4 +1,4 @@
-# Chat Handoff (v1.2.1)
+# A.B.C.D (v1.2.1)
 
 A Chrome extension that auto-saves your AI chats on your own computer as Markdown (`#` headings, bullets, links, tables, and ``` code blocks), can ask the AI for a handoff summary, and fills that context into the next AI's message box when you hit a usage limit.
 
@@ -16,7 +16,7 @@ A Chrome extension that auto-saves your AI chats on your own computer as Markdow
 ## Install / update
 
 1. Copy these files over the files in your permanent `chat-handoff` folder. **Keep your existing `icons/` folder**: `manifest.json` points to `icons/icon16.png`, `icon48.png` and `icon128.png`, and Chrome refuses to load the extension if they are missing.
-2. Open `chrome://extensions` and click the **Reload** (circular arrow) icon on **Chat Handoff**.
+2. Open `chrome://extensions` and click the **Reload** (circular arrow) icon on **A.B.C.D**.
 3. Press **F5** on any open ChatGPT, Claude, Gemini or DeepSeek tabs so the new `content.js` loads.
 
 ## What changed in v1.2.1

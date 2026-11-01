@@ -1,19 +1,17 @@
 /**
- * Zero-dependency unit test suite for Chat Handoff
- * Run with: node test/test-runner.js
+ * Zero-dependency unit test suite for A.B.C.D
+ * Run with: node test/test-runner.cjs
  */
 
 const assert = require("assert");
-const {
-  mergeMessages,
-  cleanMessageText,
-  removeSummaryExchange,
-  stripObsidianLinks,
-  chatKey,
-  buildHandoffPrompt,
-  buildObsidianNote,
-  SUMMARY_MARKER
-} = require("../shared.js");
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+// Load shared.js directly into context without needing module.exports
+const sharedCode = fs.readFileSync(path.join(__dirname, "../shared.js"), "utf8");
+// Expose top-level declarations (including const) to this context
+vm.runInThisContext(sharedCode);
 
 let totalTests = 0;
 let passedTests = 0;
@@ -31,7 +29,7 @@ function test(name, fn) {
 }
 
 console.log("\n=========================================");
-console.log("Running Chat Handoff Test Suite");
+console.log("Running A.B.C.D Test Suite");
 console.log("=========================================\n");
 
 // -----------------------------------------------------------------------------
@@ -244,7 +242,8 @@ test("buildObsidianNote includes frontmatter, title, summary, and transcript", (
   };
 
   const note = buildObsidianNote(chat);
-  assert.ok(note.startsWith("---\nsource: Claude"));
+  assert.ok(note.startsWith("---\nsource:"));
+  assert.ok(note.includes('source: "Claude"'));
   assert.ok(note.includes("tags: [ai-handoff]"));
   assert.ok(note.includes("# Refactoring Database Layer"));
   assert.ok(note.includes("## Summary"));
