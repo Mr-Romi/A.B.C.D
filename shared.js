@@ -10,6 +10,8 @@
  *   - HELPER FUNCTIONS that turn a saved chat into
  *       (a) the text you paste into the next AI  -> buildHandoffPrompt()
  *       (b) an Obsidian note                      -> buildObsidianNote()
+ *   - TEXT CLEANUP & MARKDOWN HELPERS so headings, bullets, and ```code```
+ *     blocks survive cleanly without hidden screen-reader labels or icon fonts.
  *
  * A "chat" object (what we store in chrome.storage.local) looks like:
  *   {
@@ -70,7 +72,15 @@ const SUMMARY_PROMPT = [
 // Builds the storage key for a chat. Same site + same page address = same key,
 // so re-saving the same chat updates it instead of making duplicates.
 function chatKey(siteId, pathname) {
-  return "chat:" + siteId + ":" + pathname;
+  const cleanPath = (pathname || "/").replace(/\/+$/, "") || "/";
+  return "chat:" + siteId + ":" + cleanPath;
+}
+
+// True when the URL is still a generic "new chat" landing page before the site
+// assigns a unique conversation ID in the URL.
+function isGenericPath(pathname) {
+  const p = (pathname || "/").replace(/\/+$/, "") || "/";
+  return p === "/" || p === "/app" || p === "/new" || p === "/chat" || p === "/chats";
 }
 
 // Turns one message into readable text, e.g. "**User:** hello".
@@ -79,16 +89,44 @@ function formatMessage(message) {
   return "**" + who + ":** " + message.text;
 }
 
+// Checks whether a user message is our own summary request (even if the marker
+// was slightly altered or truncated).
+function isSummaryRequestText(text) {
+  if (!text) return false;
+  return (
+    text.includes(SUMMARY_MARKER) ||
+    text.includes("Please write a handoff summary of this entire conversation so I can continue it in another AI")
+  );
+}
+
+// Checks whether an assistant reply looks like a generated handoff summary.
+function isSummaryReplyText(text) {
+  if (!text) return false;
+  return (
+    /(?:^|\n)#*\s*Context:\s+/i.test(text) &&
+    /\*\*Goal:\*\*|Goal:/i.test(text) &&
+    /\*\*Current state:\*\*|Current state:/i.test(text) &&
+    /\*\*Key decisions:\*\*|Key decisions:/i.test(text)
+  );
+}
+
 // Removes our summary request and the AI's answer to it from a message list.
 // (We saved them for the summary field, so we don't want them in the transcript.)
-function removeSummaryExchange(messages) {
+function removeSummaryExchange(messages, knownSummaryText) {
+  const normKnown = knownSummaryText ? cleanMessageText("assistant", knownSummaryText) : "";
   const cleaned = [];
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
-    if (m.role === "user" && m.text.includes(SUMMARY_MARKER)) {
+    if (m.role === "user" && isSummaryRequestText(m.text)) {
       // Skip this user message AND the assistant reply right after it.
       if (messages[i + 1] && messages[i + 1].role === "assistant") i++;
       continue;
+    }
+    // Also skip any assistant message that matches the saved summary or has
+    // the exact handoff summary template structure.
+    if (m.role === "assistant") {
+      if (normKnown && m.text.trim() === normKnown) continue;
+      if (isSummaryReplyText(m.text)) continue;
     }
     cleaned.push(m);
   }
@@ -136,17 +174,17 @@ function makeFileName(chat) {
 // If a summary exists:  summary + your latest messages word-for-word.
 // If not:               the (trimmed) raw transcript.
 function buildHandoffPrompt(chat) {
-  const messages = chat.messages || [];
-  const hasSummary = chat.summary && chat.summary.trim().length > 0;
+  const rawSummary = chat.summary ? cleanMessageText("assistant", chat.summary) : "";
+  const messages = removeSummaryExchange(chat.messages || [], rawSummary);
+  const hasSummary = rawSummary.length > 0;
   let body;
 
   if (hasSummary) {
     const tail = takeTail(messages, RECENT_TAIL_CHARS);
     body =
       "## Summary of the conversation so far\n\n" +
-      stripObsidianLinks(chat.summary.trim()) +
-      "\n\n## Most recent messages (word for word)\n\n" +
-      tail.text;
+      stripObsidianLinks(rawSummary) +
+      (tail.text ? "\n\n## Most recent messages (word for word)\n\n" + tail.text : "");
   } else {
     const tail = takeTail(messages, MAX_HANDOFF_CHARS);
     body =
@@ -174,10 +212,12 @@ function buildHandoffPrompt(chat) {
 // reads as properties), then the summary, then the full transcript.
 function buildObsidianNote(chat) {
   const date = new Date(chat.updatedAt || Date.now()).toISOString().slice(0, 10);
-  const summaryText = chat.summary && chat.summary.trim()
-    ? chat.summary.trim()
+  const cleanedSummary = chat.summary ? cleanMessageText("assistant", chat.summary) : "";
+  const summaryText = cleanedSummary
+    ? cleanedSummary
     : "_No summary generated yet. Press \"Generate summary\" in the extension while the chat still has room._";
-  const transcript = (chat.messages || []).map(formatMessage).join("\n\n");
+  const cleanedMessages = removeSummaryExchange(chat.messages || [], cleanedSummary);
+  const transcript = cleanedMessages.map(formatMessage).join("\n\n");
 
   return (
     "---\n" +
@@ -197,8 +237,8 @@ function buildObsidianNote(chat) {
 
 /* ---------------------- CLEANING MESSAGE TEXT ---------------------- */
 // The websites hide extra text inside their messages (screen-reader labels
-// such as "You said" or "Claude responded:", and repeated lines). When we read
-// the page we pick that text up too, so we tidy it here.
+// such as "You said" or "Claude responded:", icon-font symbols, and repeated
+// lines). When we read the page we pick that text up too, so we tidy it here.
 
 // Some sites put the same text twice in one message ("hi\n\nhi").
 // If the first half equals the second half, keep only one copy.
@@ -213,38 +253,88 @@ function collapseDoubledText(text) {
   return text;
 }
 
-// Removes a long line that is an exact repeat of the line just before it.
-// (Short lines are kept, because code often has repeated lines like "}".)
+// Removes a long line that is an exact repeat of the previous non-empty line,
+// even if heading markers (#) or bold markers (**) differ on the first line.
 function dropRepeatedLines(text) {
   const out = [];
-  let last = "";
+  let lastNorm = "";
+  let inCodeBlock = false;
+
   for (const line of text.split("\n")) {
-    const norm = line.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/\s+/g, " ").trim();
-    if (norm === "") { out.push(line); continue; }          // keep blank lines
-    if (norm.length > 20 && norm === last) continue;        // skip exact repeat
+    if (line.trim().startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      out.push(line);
+      continue;
+    }
+    if (inCodeBlock) {
+      out.push(line);
+      continue;
+    }
+    const norm = line
+      .replace(/^[#*>-]+\s*/, "")
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/\*\*/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (norm === "") {
+      out.push(line);
+      continue;
+    }
+    if (norm.length > 15 && norm === lastNorm) continue; // skip exact repeat
     out.push(line);
-    last = norm;
+    lastNorm = norm;
   }
   return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 // Tidies one message. role is "user" or "assistant".
 function cleanMessageText(role, text) {
-  let t = String(text || "").replace(/\r/g, "").trim();
+  let t = String(text || "").replace(/\r/g, "");
 
+  // 1. Strip Private Use Area (PUA) icon-font glyphs used by Claude/UI buttons
+  //    (e.g. \uE000 - \uF8FF like         ).
+  t = t.replace(/[\uE000-\uF8FF]/g, "");
+
+  // 2. Strip leading screen-reader headings/labels:
+  //    On Gemini, extractMarkdown turns the hidden <h5>You said ...</h5> into
+  //    "##### You said <truncated preview>\n\n<real message>".
   if (role === "user") {
-    // Gemini adds a hidden "You said" label AND repeats your text. We only
-    // strip the label when we can confirm the doubling, so a message that
-    // genuinely starts with "You said" is never damaged.
-    const stripped = t.replace(/^You said:?\s+/i, "");
+    let stripped = t.trim();
+    // If line 1 is a markdown heading starting with "# You said..." followed by the real message, drop line 1.
+    stripped = stripped.replace(/^#{1,6}\s*You said:?[^\n]*\n+/i, "").trim();
+    // Or if it starts with plain "You said:" without a newline:
+    stripped = stripped.replace(/^(#{1,6}\s*)?(You said|User):?\s+/i, "").trim();
     const collapsed = collapseDoubledText(stripped);
-    if (collapsed !== stripped) t = collapsed;
+    t = collapsed !== stripped ? collapsed : stripped;
   } else {
-    t = t.replace(/^Claude responded:\s*/i, ""); // hidden label on Claude replies
+    t = t.trim().replace(/^(#{1,6}\s*)?(Claude responded|Claude said|ChatGPT said|Gemini said):?\s*/i, "");
+    // Fold standalone language labels ("Python\n\n```\n") into the code fence ("```python\n")
+    t = t.replace(/(?:^|\n)([A-Za-z0-9_+#.-]{1,20})\n+```\n/g, function (_m, lang) {
+      const cleanLang = lang.trim().toLowerCase();
+      if (cleanLang === "code") return "\n```\n";
+      return "\n```" + cleanLang + "\n";
+    });
   }
 
+  // 3. Remove standalone UI noise lines (timestamps, "Paused: Your free usage...", "Continue").
+  const cleanLines = [];
+  for (const line of t.split("\n")) {
+    const trimmed = line.trim();
+    if (/^(just now|\d+\s+(second|minute|hour|day)s?\s+ago)$/i.test(trimmed)) continue;
+    if (/^Paused:\s+Your free usage returns/i.test(trimmed)) continue;
+    if (/^(Retry|Copy|Edit|Continue|Good response|Bad response)$/i.test(trimmed)) continue;
+    if (/^(Edited \d+ files?|Read a file|Ran a command)(,\s*(edited \d+ files?|read a file|ran a command|shared files))*$/i.test(trimmed)) continue;
+    cleanLines.push(line);
+  }
+  t = cleanLines.join("\n");
+
+  // 4. Drop repeated lines (e.g. thinking-step headers or doubled Context titles).
   t = dropRepeatedLines(t);
-  t = t.replace(/\n\s*(just now|\d+\s+(second|minute|hour|day)s?\s+ago)\s*$/i, ""); // "just now" / "1 minute ago" footer
+
+  // 5. Final trim of trailing timestamps if any remain at the end.
+  t = t.replace(/\n\s*(just now|\d+\s+(second|minute|hour|day)s?\s+ago)\s*$/i, "");
   return t.trim();
 }
 
@@ -253,25 +343,60 @@ function cleanMessageText(role, text) {
 // Some chat pages only keep the most recent messages on screen. If we simply
 // saved what is on screen, older messages we saved earlier would be lost.
 // This combines what we saved before ("existing") with what is on screen
-// now ("fresh"): it finds where the on-screen messages line up with the saved
-// ones, keeps the older saved part, and adds the new part.
+// now ("fresh"):
+//   - If fresh already has all or more messages starting from the same root,
+//     trust fresh.
+//   - Otherwise, find where a SUFFIX of existing matches a PREFIX of fresh,
+//     so we never slice off the tail of existing when an early message like "hi"
+//     happens to repeat later.
 function mergeMessages(existing, fresh) {
-  if (!existing || existing.length === 0 || fresh.length === 0) return fresh;
+  if (!existing || existing.length === 0) return fresh;
+  if (!fresh || fresh.length === 0) return existing;
 
-  for (let start = 0; start < existing.length; start++) {
-    const overlap = Math.min(existing.length - start, fresh.length);
-    let matches = true;
-    for (let k = 0; k < overlap; k++) {
-      const a = existing[start + k];
-      const b = fresh[k];
-      // The LAST overlapping message may still have been growing while it was
-      // saved (the AI was typing), so we accept one being the start of the other.
-      const isLast = k === overlap - 1;
-      const sameText = a.text === b.text ||
-        (isLast && (a.text.startsWith(b.text) || b.text.startsWith(a.text)));
-      if (a.role !== b.role || !sameText) { matches = false; break; }
-    }
-    if (matches) return existing.slice(0, start).concat(fresh);
+  // Helper: check if two messages match (allowing the very last compared message
+  // to have grown while streaming).
+  function msgMatches(a, b, isLastItem) {
+    if (a.role !== b.role) return false;
+    if (a.text === b.text) return true;
+    if (isLastItem && (a.text.startsWith(b.text) || b.text.startsWith(a.text))) return true;
+    return false;
   }
-  return fresh; // no overlap found: trust what is on screen
+
+  // Find a suffix of `existing` (starting at `start` and reaching the end of
+  // `existing`, or where `fresh` completely covers `existing` from `start`)
+  // that matches the prefix of `fresh`.
+  for (let start = 0; start < existing.length; start++) {
+    const remainingExisting = existing.length - start;
+    // IMPORTANT: if fresh is shorter than remainingExisting, this `start` would
+    // throw away the newer messages at the end of `existing`! Skip it unless
+    // fresh reaches the end of existing.
+    if (fresh.length < remainingExisting) continue;
+
+    let matches = true;
+    for (let k = 0; k < remainingExisting; k++) {
+      const isLast = k === remainingExisting - 1;
+      if (!msgMatches(existing[start + k], fresh[k], isLast)) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return existing.slice(0, start).concat(fresh);
+    }
+  }
+
+  // What if the user scrolled UP or the page only rendered a partial window?
+  // If `fresh` is larger than `existing`, trust `fresh`; if `existing` is larger
+  // and no suffix matched, append any genuinely new tail messages from `fresh`.
+  if (fresh.length >= existing.length) return fresh;
+
+  const lastExisting = existing[existing.length - 1];
+  const idxInFresh = fresh.findIndex(function (m) {
+    return m.role === lastExisting.role && (m.text === lastExisting.text || m.text.startsWith(lastExisting.text));
+  });
+  if (idxInFresh !== -1) {
+    return existing.slice(0, existing.length - 1).concat(fresh.slice(idxInFresh));
+  }
+
+  return existing.concat(fresh);
 }

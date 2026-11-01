@@ -4,7 +4,7 @@
  * This script runs INSIDE the AI website (ChatGPT, Claude, Gemini, ...).
  * It is the only part that can see the page, so it does four jobs:
  *
- *   1. READ the messages on the page            (the "adapters" below)
+ *   1. READ the messages on the page as clean Markdown (the "adapters" below)
  *   2. AUTO-SAVE them whenever the chat changes (so you are covered even
  *                                                if you hit the limit)
  *   3. GENERATE A SUMMARY by typing a request into the chat and saving the
@@ -13,19 +13,13 @@
  *
  * The popup (popup.js) talks to this script by sending it messages.
  *
- * IMPORTANT - HOW THIS CAN BREAK:
- * AI websites change their HTML without warning. All the "selectors" (the
- * strings like '[data-message-author-role]' that point at parts of the page)
- * are gathered in the ADAPTERS section. If a site stops working, ONLY that
- * site's adapter needs fixing. Copy the error to Claude and ask for a fix.
- *
  * shared.js is loaded before this file, so the settings and helper functions
- * from there (SUMMARY_PROMPT, chatKey, ...) are available here.
+ * from there (SUMMARY_PROMPT, chatKey, cleanMessageText, ...) are available.
  * ====================================================================== */
 
 
 /* ======================================================================
- * SECTION 1: SMALL UTILITIES
+ * SECTION 1: SMALL UTILITIES & HTML-TO-MARKDOWN READER
  * ====================================================================== */
 
 // Pause for some milliseconds:  await sleep(500);
@@ -34,8 +28,7 @@ function sleep(ms) {
 }
 
 // Returns a version of `fn` that waits until things have been quiet for `ms`
-// milliseconds before running. Used so we don't save 100 times per second
-// while the AI is typing its answer.
+// milliseconds before running.
 function debounce(fn, ms) {
   let timer = null;
   return function () {
@@ -44,14 +37,12 @@ function debounce(fn, ms) {
   };
 }
 
-// True if an element is actually visible on screen (pages often contain
-// hidden duplicate input boxes that we must ignore).
+// True if an element is actually visible on screen.
 function isVisible(el) {
   return !!(el && (el.offsetWidth > 0 || el.offsetHeight > 0));
 }
 
-// Goes through a list of CSS selectors and returns the first VISIBLE element
-// that matches one of them (or null if nothing matches).
+// Goes through a list of CSS selectors and returns the first VISIBLE element.
 function findVisible(selectors) {
   for (const selector of selectors) {
     const matches = document.querySelectorAll(selector);
@@ -71,18 +62,119 @@ function findAny(selectors) {
   return null;
 }
 
+// Converts a DOM element into clean Markdown so headings (#), bold (**),
+// bullet lists (-), and fenced code blocks (```) survive in your notes
+// and handoff prompts instead of turning into flat plain text.
+function extractMarkdown(rootEl) {
+  if (!rootEl) return "";
+
+  // Clone the element so we can remove hidden buttons/headers without
+  // touching the live page.
+  const clone = rootEl.cloneNode(true);
+
+  // Remove UI chrome, copy buttons, thinking/tool accordions, SVGs, and screen-reader-only labels.
+  const junkSelectors = [
+    "button", "svg", "style", "script", "noscript",
+    ".sr-only", ".visually-hidden", "[aria-hidden='true']",
+    "[data-testid*='copy']", "[data-testid*='action']",
+    "details", // collapsible thinking/tool steps in Claude
+    "follow-up-questions", ".follow-up-questions", "[class*='follow-up']"
+  ];
+  clone.querySelectorAll(junkSelectors.join(", ")).forEach(function (el) {
+    // Keep <details> only if it actually holds user-written content, otherwise remove tool/thinking steps
+    el.remove();
+  });
+
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.nodeValue || "";
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+    const tag = node.tagName.toLowerCase();
+
+    // Fenced code blocks: <pre><code>...</code></pre>
+    if (tag === "pre") {
+      const codeEl = node.querySelector("code") || node;
+      let lang = "";
+      const cls = (codeEl.className || "") + " " + (node.className || "");
+      const langMatch = cls.match(/language-([a-zA-Z0-9_+-]+)/);
+      if (langMatch) lang = langMatch[1];
+      const rawCode = (codeEl.textContent || "").replace(/\n+$/, "");
+      return "\n\n```" + lang + "\n" + rawCode + "\n```\n\n";
+    }
+
+    // Inline code: <code>...</code>
+    if (tag === "code") {
+      const txt = (node.textContent || "").trim();
+      return txt ? "`" + txt + "`" : "";
+    }
+
+    if (tag === "br") return "\n";
+    if (tag === "hr") return "\n\n---\n\n";
+
+    // Recurse on children
+    let inner = "";
+    for (const child of node.childNodes) {
+      inner += walk(child);
+    }
+
+    // Headings
+    if (/^h[1-6]$/.test(tag)) {
+      const level = Number(tag[1]);
+      return "\n\n" + "#".repeat(level) + " " + inner.trim() + "\n\n";
+    }
+
+    // Bold & Italic
+    if (tag === "strong" || tag === "b") {
+      const t = inner.trim();
+      return t ? "**" + t + "**" : "";
+    }
+    if (tag === "em" || tag === "i") {
+      const t = inner.trim();
+      return t ? "*" + t + "*" : "";
+    }
+
+    // Lists
+    if (tag === "li") {
+      const parentTag = node.parentElement ? node.parentElement.tagName.toLowerCase() : "ul";
+      if (parentTag === "ol") {
+        const siblings = Array.from(node.parentElement.children).filter(function (c) {
+          return c.tagName && c.tagName.toLowerCase() === "li";
+        });
+        const idx = siblings.indexOf(node) + 1;
+        return "\n" + idx + ". " + inner.trim();
+      }
+      return "\n- " + inner.trim();
+    }
+    if (tag === "ul" || tag === "ol") {
+      return "\n" + inner + "\n\n";
+    }
+
+    // Paragraphs and block containers
+    if (tag === "p" || tag === "blockquote" || tag === "section" || tag === "article") {
+      return "\n\n" + inner.trim() + "\n\n";
+    }
+    if (tag === "div") {
+      // Only add line breaks around block-like divs
+      return inner;
+    }
+
+    return inner;
+  }
+
+  const md = walk(clone)
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  // Fallback to innerText if walk produced nothing
+  return md || (rootEl.innerText || "").trim();
+}
+
 
 /* ======================================================================
  * SECTION 2: ADAPTERS - one small "recipe" per website
- * ----------------------------------------------------------------------
- * Each adapter says:
- *   id / name / hosts      who it is and which web addresses it covers
- *   getMessages()          how to read the chat from the page
- *   inputSelectors         where the message box is
- *   sendButtonSelectors    where the send button is
- *   stopButtonSelectors    the "stop generating" button (exists only while
- *                          the AI is still writing - we use it to know when
- *                          the AI has finished)
  * ====================================================================== */
 
 const ADAPTERS = [
@@ -96,12 +188,10 @@ const ADAPTERS = [
 
     getMessages: function () {
       const messages = [];
-      // ChatGPT marks every message with data-message-author-role="user"
-      // or "assistant". This is one of the most stable selectors around.
       document.querySelectorAll("[data-message-author-role]").forEach(function (el) {
         const role = el.getAttribute("data-message-author-role");
-        if (role !== "user" && role !== "assistant") return; // ignore system/tool
-        const text = el.innerText.trim();
+        if (role !== "user" && role !== "assistant") return;
+        const text = extractMarkdown(el);
         if (text) messages.push({ role: role, text: text });
       });
       return messages;
@@ -121,33 +211,54 @@ const ADAPTERS = [
 
     getMessages: function () {
       const messages = [];
-      // Your messages have data-testid="user-message".
-      // Claude's replies have the class "font-claude-response".
-      // One query that matches both returns them in page order.
-      // We list several possible markers for Claude's replies, because the
-      // site renames them from time to time. The first one is the usual one;
-      // the others are backups.
-      // userSel = markers for YOUR messages. The second marker is a backup
-      // for long or unusual messages (e.g. ones with attachments).
-      const userSel = "[data-testid='user-message'], .font-user-message";
-      const both =
-        userSel + ", .font-claude-response, .font-claude-message, " +
-        "[data-testid='assistant-message'], div[data-is-streaming]";
-      document.querySelectorAll(both).forEach(function (el) {
-        // If this element CONTAINS another matched element, skip it and let
-        // the inner one count. This avoids saving the same text twice, and
-        // avoids picking up button labels from outer wrapper elements.
-        if (el.querySelector(both)) return;
+      // IMPORTANT: Do NOT include div[data-is-streaming] in the combined
+      // selector! On Claude, div[data-is-streaming] is an outer turn wrapper
+      // that contains thinking steps, tool banners, and action bar icons.
+      // Instead, we match specific user and assistant message containers in DOM order.
+      const userSel = [
+        "[data-testid='user-message']",
+        ".font-user-message",
+        "[data-testid='human-turn']",
+        ".group.relative.inline-flex" // fallback for attachment/long user bubbles
+      ].join(", ");
+
+      const assistantSel = [
+        ".font-claude-response",
+        ".font-claude-message",
+        "[data-testid='assistant-message']"
+      ].join(", ");
+
+      const both = userSel + ", " + assistantSel;
+      const nodes = Array.from(document.querySelectorAll(both));
+
+      nodes.forEach(function (el) {
+        // Skip if this node is inside ANOTHER matched node (prevents duplicates
+        // when a wrapper and its inner container both match).
+        if (nodes.some(function (other) { return other !== el && other.contains(el); })) {
+          return;
+        }
         const isUser = el.matches(userSel);
-        const text = el.innerText.trim();
+        const text = extractMarkdown(el);
         if (text) messages.push({ role: isUser ? "user" : "assistant", text: text });
       });
       return messages;
     },
 
-    inputSelectors: ["div[contenteditable='true'].ProseMirror", "div[contenteditable='true']"],
-    sendButtonSelectors: ["button[aria-label='Send message']", "button[aria-label='Send Message']"],
-    stopButtonSelectors: ["button[aria-label='Stop response']", "button[aria-label='Stop Response']"],
+    inputSelectors: [
+      "div[contenteditable='true'].ProseMirror",
+      "fieldset div[contenteditable='true']",
+      "div[contenteditable='true']"
+    ],
+    sendButtonSelectors: [
+      "button[aria-label='Send message']",
+      "button[aria-label='Send Message']",
+      "button[data-testid='send-button']"
+    ],
+    stopButtonSelectors: [
+      "button[aria-label='Stop response']",
+      "button[aria-label='Stop Response']",
+      "button[data-testid='stop-button']"
+    ],
   },
 
   /* ------------------------------ Gemini ------------------------------- */
@@ -159,34 +270,45 @@ const ADAPTERS = [
 
     getMessages: function () {
       const messages = [];
-      // Gemini uses custom HTML tags: <user-query> and <model-response>.
       document.querySelectorAll("user-query, model-response").forEach(function (el) {
         const isUser = el.tagName.toLowerCase() === "user-query";
-        // Try to grab just the text part, so labels like "You said" are skipped.
+        // On Gemini, .user-query-container wraps BOTH a hidden <h5>You said ...</h5>
+        // summary and the real .query-text! Always prefer .query-text first.
         const inner = isUser
-          ? el.querySelector(".query-text")
-          : el.querySelector(".markdown, message-content");
-        const text = ((inner || el).innerText || "").trim();
+          ? (el.querySelector(".query-text") || el.querySelector(".user-query-container") || el)
+          : (el.querySelector(".markdown") || el.querySelector("message-content") || el.querySelector(".model-response-text") || el);
+        const text = extractMarkdown(inner);
         if (text) messages.push({ role: isUser ? "user" : "assistant", text: text });
       });
       return messages;
     },
 
-    inputSelectors: ["rich-textarea .ql-editor", "div.ql-editor[contenteditable='true']", "div[contenteditable='true']", "textarea"],
-    sendButtonSelectors: ["button.send-button", "button[aria-label='Send message']"],
-    stopButtonSelectors: ["button.stop", "button[aria-label='Stop response']"],
+    inputSelectors: [
+      "rich-textarea .ql-editor",
+      "div.ql-editor[contenteditable='true']",
+      "div[contenteditable='true']",
+      "textarea"
+    ],
+    sendButtonSelectors: [
+      "button.send-button",
+      "button[aria-label='Send message']",
+      "button[aria-label='Send prompt']"
+    ],
+    stopButtonSelectors: [
+      "button.stop",
+      "button[aria-label='Stop response']",
+      "button[aria-label='Stop generating']"
+    ],
   },
 ];
 
 // Sites where we can only FILL the input box (read support not written yet).
-// This is enough to paste a handoff INTO Grok, DeepSeek or Copilot.
-// To add full support later, copy one adapter above and change the selectors.
 function limitedAdapter(id, name, host) {
   return {
     id: id,
     name: name,
     hosts: [host],
-    supported: false,                       // can't read chats here (yet)
+    supported: false,
     getMessages: function () { return []; },
     inputSelectors: ["textarea", "div[contenteditable='true']"],
     sendButtonSelectors: ["button[type='submit']", "button[aria-label*='Send']"],
@@ -212,54 +334,54 @@ const ADAPTER = pickAdapter();
 
 
 /* ======================================================================
- * SECTION 3: SAVING THE CHAT (runs automatically)
+ * SECTION 3: SAVING THE CHAT (runs automatically & safely locked)
  * ====================================================================== */
 
-// Makes a nice title: uses the browser tab title if it's useful, otherwise
-// the first words of your first message.
 function guessTitle(messages) {
   let title = (document.title || "")
     .replace(/\s*[-|–—]\s*(ChatGPT|Claude|Gemini|Google Gemini)\s*$/i, "")
     .trim();
-  const isGeneric = !title || /^(ChatGPT|Claude|Gemini|Google Gemini)$/i.test(title);
+  const isGeneric = !title || /^(ChatGPT|Claude|Gemini|Google Gemini|New chat)$/i.test(title);
   if (isGeneric) {
     const firstUser = messages.find(function (m) { return m.role === "user"; });
-    title = firstUser ? firstUser.text.replace(/\s+/g, " ").slice(0, 60) : "Untitled chat";
+    const firstAny = firstUser || messages[0];
+    title = firstAny ? firstAny.text.replace(/\s+/g, " ").slice(0, 60) : "Untitled chat";
   }
   return title;
 }
 
-// Deletes the oldest saved chats if we have more than MAX_SAVED_CHATS.
 async function pruneOldChats() {
-  const all = await chrome.storage.local.get(null); // null = "give me everything"
+  const all = await chrome.storage.local.get(null);
   const chats = Object.values(all).filter(function (v) {
     return v && typeof v.id === "string" && v.id.startsWith("chat:");
   });
   if (chats.length <= MAX_SAVED_CHATS) return;
-  chats.sort(function (a, b) { return b.updatedAt - a.updatedAt; }); // newest first
+  chats.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
   const toDelete = chats.slice(MAX_SAVED_CHATS).map(function (c) { return c.id; });
   await chrome.storage.local.remove(toDelete);
 }
 
-// When you reload/update the extension, tabs that were already open keep an
-// OLD copy of this script. Chrome cuts that old copy off from the extension
-// (chrome.storage becomes undefined). We detect that here so the old copy can
-// stop quietly instead of throwing errors on every page change.
-let pageObserver = null;   // the page watcher; it is created further below
+let pageObserver = null;
 let warnedAboutOldCopy = false;
+let isSummarizing = false; // prevents auto-save from racing with generateSummary()
+let lastActiveKey = null;  // remembers if this tab started on a generic URL like /new or /app
 
 function extensionIsAlive() {
-  return !!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id &&
-            chrome.storage && chrome.storage.local);
+  try {
+    return !!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id &&
+              chrome.storage && chrome.storage.local);
+  } catch (e) {
+    return false;
+  }
 }
 
-// Reads the page and stores the chat. Returns the saved chat (or null if the
-// page has no messages yet). Safe to call as often as you like.
-async function saveCurrentChat() {
+// Reads the page and stores the chat.
+// Optional `newSummaryText` lets `summarize` save the summary atomically
+// without racing against the MutationObserver auto-save.
+async function saveCurrentChat(newSummaryText) {
   try {
     if (!ADAPTER || !ADAPTER.supported) return null;
 
-    // Old copy left over from before an extension reload? Stop and explain once.
     if (!extensionIsAlive()) {
       if (pageObserver) pageObserver.disconnect();
       if (!warnedAboutOldCopy) {
@@ -269,39 +391,48 @@ async function saveCurrentChat() {
       return null;
     }
 
-    // Read the page, tidy each message (remove hidden labels and repeated
-    // text), then hide our own summary request/answer from the transcript.
-    const onScreen = removeSummaryExchange(
-      ADAPTER.getMessages()
-        .map(function (m) { return { role: m.role, text: cleanMessageText(m.role, m.text) }; })
-        .filter(function (m) { return m.text; })
-    );
-    if (onScreen.length === 0) return null; // empty/new chat: nothing to save
-
     const key = chatKey(ADAPTER.id, location.pathname);
-    const existing = (await chrome.storage.local.get(key))[key];
+    let existing = (await chrome.storage.local.get(key))[key];
 
-    // The AI's summary reply is stored in its own "summary" field, so we keep
-    // it OUT of the transcript (otherwise it would appear twice in the handoff).
-    // This also cleans copies of it saved by older versions.
-    const summaryText = existing && existing.summary ? existing.summary.trim() : "";
-    function withoutSummary(list) {
-      if (!summaryText) return list;
-      return list.filter(function (m) { return !(m.role === "assistant" && m.text.trim() === summaryText); });
+    // If the tab just moved from a generic URL (e.g. /app or /new) to a real
+    // conversation URL (e.g. /app/abc123), migrate the temporary chat record!
+    if (!existing && lastActiveKey && lastActiveKey !== key && isGenericPath(lastActiveKey.split(":").slice(2).join(":"))) {
+      const prev = (await chrome.storage.local.get(lastActiveKey))[lastActiveKey];
+      if (prev) {
+        existing = prev;
+        await chrome.storage.local.remove(lastActiveKey);
+      }
     }
-    const transcriptNow = withoutSummary(onScreen);
-    if (transcriptNow.length === 0) return existing || null; // only the summary is on screen
+    lastActiveKey = key;
 
-    // Combine with what we saved before, so that if the page only shows the
-    // most recent messages, the older saved ones are kept.
-    const messages = mergeMessages(existing && withoutSummary(existing.messages || []), transcriptNow);
+    const summaryText = newSummaryText
+      ? cleanMessageText("assistant", newSummaryText)
+      : (existing && existing.summary ? cleanMessageText("assistant", existing.summary) : "");
 
-    // If nothing changed since the last save, don't write again.
-    if (existing && JSON.stringify(existing.messages) === JSON.stringify(messages)) {
+    // Read the page, tidy each message, and strip out any summary request/reply.
+    const rawOnScreen = ADAPTER.getMessages()
+      .map(function (m) { return { role: m.role, text: cleanMessageText(m.role, m.text) }; })
+      .filter(function (m) { return m.text; });
+
+    const transcriptNow = removeSummaryExchange(rawOnScreen, summaryText);
+
+    // Combine with previously saved messages (also stripped of any summary copies).
+    const existingCleaned = existing ? removeSummaryExchange(existing.messages || [], summaryText) : [];
+    const messages = mergeMessages(existingCleaned, transcriptNow);
+
+    // If there are no transcript messages AND no summary to save, nothing to store yet.
+    if (messages.length === 0 && !summaryText) return existing || null;
+
+    // If nothing changed since the last save, skip writing to storage.
+    if (
+      existing &&
+      !newSummaryText &&
+      existing.summary === summaryText &&
+      JSON.stringify(existing.messages) === JSON.stringify(messages)
+    ) {
       return existing;
     }
 
-    // "...existing" keeps old fields (like the summary) that we aren't changing.
     const chat = Object.assign({}, existing, {
       id: key,
       site: ADAPTER.name,
@@ -311,22 +442,42 @@ async function saveCurrentChat() {
       messages: messages,
     });
 
+    if (summaryText) {
+      chat.summary = summaryText;
+      if (newSummaryText) chat.summaryAt = Date.now();
+    }
+
     await chrome.storage.local.set({ [key]: chat });
     await pruneOldChats();
     return chat;
   } catch (err) {
-    // Happens e.g. right after you reload the extension (old page copy is orphaned).
-    console.warn("[Chat Handoff] could not save:", err);
+    const msg = String((err && err.message) || err);
+    // If the extension was just updated/reloaded in chrome://extensions, this
+    // tab's old script is cut off. Disconnect the watcher quietly and do NOT
+    // pass the Error object to console.warn (which Chrome flags as an extension error).
+    if (msg.includes("Extension context invalidated") || !extensionIsAlive()) {
+      if (pageObserver) pageObserver.disconnect();
+      if (!warnedAboutOldCopy) {
+        warnedAboutOldCopy = true;
+        console.info("[Chat Handoff] Extension was updated. Press F5 on this tab to use the new version.");
+      }
+      return null;
+    }
+    console.info("[Chat Handoff] could not save: " + msg);
     return null;
   }
 }
 
 // AUTO-SAVE: watch the page for changes and save 3 seconds after things calm down.
 if (ADAPTER && ADAPTER.supported) {
-  const autoSave = debounce(saveCurrentChat, 3000);
-  pageObserver = new MutationObserver(autoSave); // fires whenever the page changes
+  const autoSave = debounce(function () {
+    if (!isSummarizing) saveCurrentChat();
+  }, 3000);
+  pageObserver = new MutationObserver(autoSave);
   pageObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
-  setTimeout(saveCurrentChat, 4000); // also save once shortly after the page loads
+  setTimeout(function () {
+    if (!isSummarizing) saveCurrentChat();
+  }, 4000);
 }
 
 
@@ -334,36 +485,25 @@ if (ADAPTER && ADAPTER.supported) {
  * SECTION 4: TYPING INTO THE CHAT BOX AND SENDING
  * ====================================================================== */
 
-// Puts `text` into the message box. Returns true if it worked.
-// Modern chat boxes are "rich editors", so simply setting .value does not work
-// there - the site wouldn't notice the change. We use tricks that make the
-// editor think YOU typed or pasted the text.
 function setInputText(input, text) {
   input.focus();
 
-  // Case 1: an old-style <textarea> / <input>.
   if (input.tagName === "TEXTAREA" || input.tagName === "INPUT") {
-    // Websites built with React ignore plain "input.value = ...". Calling the
-    // browser's own "value setter" and then firing an "input" event works.
     const proto = input.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, "value").set.call(input, text);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     return input.value.length > 0;
   }
 
-  // Case 2: a rich editor (contenteditable). First select everything inside
-  // it, so our text REPLACES whatever is there.
   const selection = window.getSelection();
   const range = document.createRange();
   range.selectNodeContents(input);
   selection.removeAllRanges();
   selection.addRange(range);
 
-  // Method A: execCommand("insertText") behaves like real typing.
   let worked = false;
   try { worked = document.execCommand("insertText", false, text); } catch (e) { /* ignore */ }
 
-  // Method B (backup): pretend we pasted the text.
   const currentText = (input.innerText || input.textContent || "").trim();
   if (!worked || currentText.length === 0) {
     const data = new DataTransfer();
@@ -374,9 +514,8 @@ function setInputText(input, text) {
   return (input.innerText || input.textContent || "").trim().length > 0;
 }
 
-// Clicks the send button; if we can't find it, presses Enter in the box instead.
 async function pressSend(input) {
-  await sleep(600); // give the site a moment to enable the send button
+  await sleep(600);
   const button = findVisible(ADAPTER.sendButtonSelectors);
   if (button && !button.disabled) {
     button.click();
@@ -390,10 +529,6 @@ async function pressSend(input) {
 
 /* ======================================================================
  * SECTION 5: GENERATE A SUMMARY
- * ----------------------------------------------------------------------
- * Steps: type the summary request -> send it -> wait until the AI finishes
- * answering -> save its answer as the chat's "summary".
- * NOTE: this uses one message from your limit, so do it BEFORE you run out.
  * ====================================================================== */
 
 async function generateSummary() {
@@ -402,13 +537,19 @@ async function generateSummary() {
   const input = findVisible(ADAPTER.inputSelectors);
   if (!input) throw new Error("Couldn't find the message box on this page.");
 
-  // Remember how many messages exist now, so we can tell when the new answer appears.
-  const countBefore = ADAPTER.getMessages().length;
+  // Snapshot the messages BEFORE sending so we can detect the new assistant reply
+  // even if the site doesn't match the user's summary-request bubble!
+  const beforeMessages = ADAPTER.getMessages();
+  const countBefore = beforeMessages.length;
+  const lastAssistantBefore = beforeMessages
+    .slice()
+    .reverse()
+    .find(function (m) { return m.role === "assistant"; });
+  const prevAssistantText = lastAssistantBefore ? lastAssistantBefore.text : "";
 
   if (!setInputText(input, SUMMARY_PROMPT)) throw new Error("Couldn't type into the message box.");
   await pressSend(input);
 
-  // Wait (up to 3 minutes) for the answer to appear AND finish.
   const startedAt = Date.now();
   let lastText = "";
   let lastChangeAt = Date.now();
@@ -419,21 +560,29 @@ async function generateSummary() {
     const messages = ADAPTER.getMessages();
     const last = messages[messages.length - 1];
 
-    // Our request + the AI's answer = 2 new messages. Not there yet? Keep waiting.
-    const answerStarted = messages.length >= countBefore + 2 && last && last.role === "assistant";
+    // The AI's new answer has started as soon as the last message on screen is
+    // an assistant message whose text is NEW (different from prevAssistantText)
+    // and we have at least countBefore + 1 messages.
+    const answerStarted =
+      messages.length >= countBefore + 1 &&
+      last &&
+      last.role === "assistant" &&
+      last.text.trim() !== "" &&
+      last.text !== prevAssistantText;
+
     if (!answerStarted) continue;
 
-    // A visible "stop" button means the AI is still writing.
-    const stillWriting = !!findAny(ADAPTER.stopButtonSelectors);
+    // Note: use findVisible (not findAny) so a hidden stop button in the DOM
+    // doesn't trick us into thinking the AI is still writing forever.
+    const stillWriting = !!findVisible(ADAPTER.stopButtonSelectors);
 
-    // If the text is still changing, remember the time and keep waiting.
     if (last.text !== lastText || stillWriting) {
       lastText = last.text;
       lastChangeAt = Date.now();
       continue;
     }
 
-    // Text unchanged for 3 seconds and no stop button: the answer is complete.
+    // Text unchanged for 3 seconds and no visible stop button: complete!
     if (Date.now() - lastChangeAt >= 3000) {
       return cleanMessageText("assistant", last.text);
     }
@@ -447,13 +596,9 @@ async function generateSummary() {
 
 /* ======================================================================
  * SECTION 6: TALKING TO THE POPUP
- * ----------------------------------------------------------------------
- * The popup sends messages like { action: "save" }. We do the job and
- * reply with { ok: true, ... } or { ok: false, error: "..." }.
  * ====================================================================== */
 
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
-  // We wrap everything in an async function so we can use "await".
   (async function () {
     try {
       if (!ADAPTER) {
@@ -461,27 +606,27 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
         return;
       }
 
-      // "ping": the popup asks "who are you and what can you do?"
       if (message.action === "ping") {
         sendResponse({ ok: true, site: ADAPTER.name, supported: ADAPTER.supported });
 
-      // "save": read the page now and store it
       } else if (message.action === "save") {
         const chat = await saveCurrentChat();
         sendResponse({ ok: true, chat: chat });
 
-      // "summarize": ask the AI for a summary and store the answer
       } else if (message.action === "summarize") {
-        const summaryText = await generateSummary();
-        // Make sure the chat exists in storage, then attach the summary to it.
-        const chat = await saveCurrentChat();
-        if (!chat) throw new Error("Nothing to attach the summary to.");
-        chat.summary = summaryText;
-        chat.summaryAt = Date.now();
-        await chrome.storage.local.set({ [chat.id]: chat });
-        sendResponse({ ok: true, chat: chat });
+        isSummarizing = true;
+        try {
+          // Save the transcript before sending the summary request so earlier
+          // messages are safely stored first.
+          await saveCurrentChat();
+          const summaryText = await generateSummary();
+          const chat = await saveCurrentChat(summaryText);
+          if (!chat) throw new Error("Nothing to attach the summary to.");
+          sendResponse({ ok: true, chat: chat });
+        } finally {
+          isSummarizing = false;
+        }
 
-      // "fill": put handoff text into this page's message box (does NOT send it)
       } else if (message.action === "fill") {
         const input = findVisible(ADAPTER.inputSelectors);
         if (!input) throw new Error("Couldn't find the message box on this page.");
@@ -497,6 +642,5 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
     }
   })();
 
-  // Returning true tells Chrome "I will answer later (asynchronously)".
   return true;
 });
