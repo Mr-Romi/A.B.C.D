@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!--
   popup.html
-  Redesigned Chat Handoff extension popup.
-  100% compatible with existing popup.js handlers and IDs.
+  Vibrant Cyber-Arcade Redesign
+  Redundant footer settings link removed; primary options mapped to header & vault link.
+  100% compatible with existing popup.js handlers, class toggles, and IDs.
 -->
 <html>
 <head>
@@ -11,56 +12,49 @@
   <title>Chat Handoff</title>
   <style>
     :root {
-      --bg: #ffffff;
-      --surface: #f8fafc;
-      --card-bg: #ffffff;
-      --fg: #0f172a;
-      --muted: #64748b;
-      --line: #e2e8f0;
-      --accent: #2563eb;
-      --accent-hover: #1d4ed8;
-      --accent-fg: #ffffff;
-      --accent-soft: #eff6ff;
-      --success: #16a34a;
-      --success-bg: #f0fdf4;
-      --danger: #dc2626;
-      --danger-hover: #b91c1c;
-      --danger-soft: #fef2f2;
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+      /* Deep Cosmic Canvas */
+      --bg: #090b11;
+      --grid-dot: rgba(0, 240, 255, 0.08);
+      --surface: #121622;
+      --surface-raised: #1a2133;
+      --fg: #f8fafc;
+      --muted: #94a3b8;
+      --border: #000000;
+      --outline: #26324a;
+      
+      /* Vibrant Electric Neon Palette */
+      --neon-cyan: #00f0ff;
+      --neon-cyan-glow: rgba(0, 240, 255, 0.35);
+      --neon-mint: #00ffa3;
+      --neon-mint-glow: rgba(0, 255, 163, 0.35);
+      --neon-purple: #b347eb;
+      --neon-purple-glow: rgba(179, 71, 235, 0.35);
+      --neon-amber: #ffb703;
+      --neon-pink: #ff2e93;
+      --neon-pink-glow: rgba(255, 46, 147, 0.35);
+
+      /* Tactile Hard Shadows */
+      --shadow-hard: 3px 3px 0px #000000;
+      --shadow-hard-sm: 2px 2px 0px #000000;
+      --shadow-hard-lg: 4px 4px 0px #000000;
+
       --radius-sm: 6px;
       --radius-md: 10px;
       --radius-lg: 14px;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f172a;
-        --surface: #1e293b;
-        --card-bg: #1e293b;
-        --fg: #f8fafc;
-        --muted: #94a3b8;
-        --line: #334155;
-        --accent: #3b82f6;
-        --accent-hover: #60a5fa;
-        --accent-fg: #0f172a;
-        --accent-soft: #1e3a8a33;
-        --success: #22c55e;
-        --success-bg: #052e1640;
-        --danger: #ef4444;
-        --danger-hover: #f87171;
-        --danger-soft: #450a0a40;
-        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-      }
+      --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      width: 360px;
+      width: 375px;
       padding: 14px;
-      background: var(--bg);
+      background-color: var(--bg);
+      background-image: radial-gradient(var(--grid-dot) 1.5px, transparent 1.5px);
+      background-size: 13px 13px;
       color: var(--fg);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--font-sans);
       font-size: 13px;
       line-height: 1.45;
       user-select: none;
@@ -72,92 +66,131 @@
       align-items: center;
       justify-content: space-between;
       margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 2px dashed var(--outline);
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
     .brand-icon {
-      width: 24px;
-      height: 24px;
-      background: var(--accent);
-      color: var(--accent-fg);
+      width: 30px;
+      height: 30px;
+      background: linear-gradient(135deg, var(--neon-mint), var(--neon-cyan));
+      color: #000;
+      border: 2px solid var(--border);
       border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-hard-sm);
       display: flex;
       align-items: center;
       justify-content: center;
+      transform: rotate(-3deg);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .brand:hover .brand-icon {
+      transform: rotate(3deg) scale(1.06);
+      box-shadow: 0 0 12px var(--neon-cyan-glow), var(--shadow-hard);
+    }
+
+    .brand-title-wrap {
+      display: flex;
+      flex-direction: column;
     }
 
     .brand h1 {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--fg);
+      line-height: 1.1;
     }
 
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+    .brand-badge {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 800;
+      color: var(--neon-cyan);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .icon-btn {
-      background: transparent;
-      border: 1px solid transparent;
+      background: var(--surface);
+      border: 2px solid var(--outline);
       border-radius: var(--radius-sm);
-      color: var(--muted);
+      box-shadow: var(--shadow-hard-sm);
+      color: var(--fg);
       cursor: pointer;
-      padding: 5px;
+      padding: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s ease;
+      transition: all 0.1s ease;
     }
 
     .icon-btn:hover {
-      background: var(--surface);
-      border-color: var(--line);
-      color: var(--fg);
+      background: var(--neon-amber);
+      color: #000;
+      border-color: var(--border);
+      transform: translate(-1px, -1px);
+      box-shadow: var(--shadow-hard);
+    }
+
+    .icon-btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: none;
     }
 
     /* Live Site Status Pill */
     .status-pill {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       padding: 8px 12px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
+      background: #05070a;
+      border: 2px solid var(--outline);
+      border-radius: var(--radius-sm);
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9);
       margin-bottom: 12px;
-      font-size: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
     }
 
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
-      background: var(--muted);
+      background: #64748b;
+      border: 1.5px solid #000;
       flex-shrink: 0;
     }
 
     .status-dot.active {
-      background: var(--success);
-      box-shadow: 0 0 0 3px var(--success-bg);
+      background: var(--neon-mint);
+      box-shadow: 0 0 10px var(--neon-mint);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
     }
 
     .site-text {
-      color: var(--fg);
-      font-weight: 500;
+      color: var(--neon-mint);
+      font-weight: 700;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       flex: 1;
     }
 
-    /* CSS Tabs: Zero JS dependency so unmodified popup.js still switches tabs */
+    /* CSS Tabs: Zero JS dependency */
     .tab-radio {
       position: absolute;
       opacity: 0;
@@ -165,37 +198,50 @@
     }
 
     .tabs {
-      display: flex;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      padding: 2px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
       margin-bottom: 12px;
-      gap: 2px;
     }
 
     .tab-btn {
-      flex: 1;
-      padding: 6px 10px;
+      padding: 8px 10px;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
       color: var(--muted);
-      background: transparent;
-      border-radius: calc(var(--radius-md) - 2px);
+      background: var(--surface);
+      border: 2px solid var(--outline);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-hard-sm);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      transition: all 0.15s ease;
-      text-align: center;
+      transition: all 0.12s ease;
     }
 
-    #tabRadioCurrent:checked ~ .tabs label[for="tabRadioCurrent"],
-    #tabRadioHandoff:checked ~ .tabs label[for="tabRadioHandoff"] {
-      background: var(--card-bg);
+    .tab-btn:hover {
       color: var(--fg);
-      box-shadow: var(--shadow-sm);
+      border-color: var(--fg);
+    }
+
+    #tabRadioCurrent:checked ~ .tabs label[for="tabRadioCurrent"] {
+      background: linear-gradient(135deg, var(--neon-cyan), #38bdf8);
+      color: #000;
+      border-color: var(--border);
+      transform: translate(-1px, -1px);
+      box-shadow: 0 0 12px var(--neon-cyan-glow), var(--shadow-hard);
+    }
+
+    #tabRadioHandoff:checked ~ .tabs label[for="tabRadioHandoff"] {
+      background: linear-gradient(135deg, #c084fc, var(--neon-purple));
+      color: #000;
+      border-color: var(--border);
+      transform: translate(-1px, -1px);
+      box-shadow: 0 0 12px var(--neon-purple-glow), var(--shadow-hard);
     }
 
     .tab-content {
@@ -205,156 +251,189 @@
     #tabRadioCurrent:checked ~ #tabCurrent,
     #tabRadioHandoff:checked ~ #tabHandoff {
       display: block;
+      animation: popIn 0.14s ease-out;
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     /* Cards */
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-lg);
+      background: var(--surface);
+      border: 2px solid var(--outline);
+      border-radius: var(--radius-md);
       padding: 12px;
       margin-bottom: 10px;
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-hard);
     }
 
     .card-title {
-      font-size: 11px;
-      font-weight: 700;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--muted);
-      margin-bottom: 8px;
+      letter-spacing: 0.08em;
+      color: var(--neon-amber);
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
 
-    /* Buttons */
+    /* Tactile Buttons */
     .btn {
       width: 100%;
-      padding: 9px 12px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      background: var(--surface);
+      padding: 10px 12px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
       color: var(--fg);
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: all 0.15s ease;
+      box-shadow: var(--shadow-hard);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s ease;
       text-align: center;
       font-family: inherit;
     }
 
     .btn:hover:not(:disabled) {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-      color: var(--accent);
+      background: var(--neon-amber);
+      color: #000;
+      transform: translate(-1px, -1px);
+      box-shadow: var(--shadow-hard-lg);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: 1px 1px 0px #000;
     }
 
     .btn:disabled {
-      opacity: 0.45;
+      opacity: 0.38;
       cursor: not-allowed;
-      border-color: var(--line);
+      box-shadow: none;
+      border-color: var(--outline);
       background: var(--surface);
       color: var(--muted);
+      transform: none;
     }
 
-    .btn-primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: var(--accent-fg);
-      font-weight: 600;
+    /* Vibrant Button Variants */
+    .btn-hero-cyan {
+      background: linear-gradient(135deg, var(--neon-cyan), #00c4ff);
+      color: #000;
+      font-weight: 800;
     }
 
-    .btn-primary:hover:not(:disabled) {
-      background: var(--accent-hover);
-      border-color: var(--accent-hover);
-      color: var(--accent-fg);
+    .btn-hero-cyan:hover:not(:disabled) {
+      background: linear-gradient(135deg, #4df5ff, var(--neon-cyan));
+      color: #000;
+      box-shadow: 0 0 14px var(--neon-cyan-glow), var(--shadow-hard-lg);
+    }
+
+    .btn-hero-purple {
+      background: linear-gradient(135deg, #d8b4fe, var(--neon-purple));
+      color: #000;
+      font-weight: 800;
+    }
+
+    .btn-hero-purple:hover:not(:disabled) {
+      background: linear-gradient(135deg, #f0abfc, #a855f7);
+      color: #000;
+      box-shadow: 0 0 14px var(--neon-purple-glow), var(--shadow-hard-lg);
+    }
+
+    .btn-mint {
+      background: var(--surface-raised);
+      border-color: var(--border);
+      color: var(--neon-mint);
+    }
+
+    .btn-mint:hover:not(:disabled) {
+      background: var(--neon-mint);
+      color: #000;
+      box-shadow: 0 0 12px var(--neon-mint-glow), var(--shadow-hard);
     }
 
     .btn-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
-      margin-top: 8px;
-    }
-
-    .btn-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .btn-text-content {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      text-align: left;
     }
 
     .btn-sub {
-      font-size: 11px;
-      font-weight: 400;
-      opacity: 0.8;
+      font-size: 10px;
+      font-weight: 500;
+      opacity: 0.78;
       margin-top: 1px;
     }
 
+    /* Links */
     .link {
       background: none;
       border: none;
       padding: 0;
-      color: var(--accent);
-      font-size: 12px;
+      color: var(--neon-cyan);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      font-family: inherit;
     }
 
-    .link:hover {
+    .link:hover:not(:disabled) {
+      color: var(--neon-mint);
       text-decoration: underline;
     }
 
-    .link.danger {
-      color: var(--danger);
+    /* Dropdown Row with Inline Delete Button */
+    .dropdown-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    .link.danger:hover {
-      color: var(--danger-hover);
-    }
-
-    /* Select */
     .select-wrap {
       position: relative;
-      margin-bottom: 8px;
+      flex: 1;
     }
 
     select {
       width: 100%;
       padding: 9px 30px 9px 10px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: #05070a;
       color: var(--fg);
-      font-size: 12px;
-      font-weight: 500;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
       outline: none;
       appearance: none;
       cursor: pointer;
+      box-shadow: var(--shadow-hard-sm);
       text-overflow: ellipsis;
       white-space: nowrap;
       overflow: hidden;
-      font-family: inherit;
     }
 
     select:focus {
-      border-color: var(--accent);
+      border-color: var(--neon-purple);
+    }
+
+    select option {
+      background: var(--surface);
+      color: var(--fg);
     }
 
     .select-arrow {
@@ -363,22 +442,58 @@
       top: 50%;
       transform: translateY(-50%);
       pointer-events: none;
-      color: var(--muted);
+      color: var(--neon-purple);
       display: flex;
     }
 
-    /* Accordion */
+    .btn-trash {
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      background: var(--surface-raised);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-hard-sm);
+      color: var(--neon-pink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.1s ease;
+    }
+
+    .btn-trash:hover:not(:disabled) {
+      background: var(--neon-pink);
+      color: #000;
+      box-shadow: 0 0 10px var(--neon-pink-glow), var(--shadow-hard);
+      transform: translate(-1px, -1px);
+    }
+
+    .btn-trash:active:not(:disabled) {
+      transform: translate(1px, 1px);
+      box-shadow: none;
+    }
+
+    .btn-trash:disabled {
+      opacity: 0.4 !important;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Manual Summary Drawer */
     details {
-      margin-top: 4px;
-      border-radius: var(--radius-md);
+      margin-top: 10px;
+      border-top: 1px dashed var(--outline);
+      padding-top: 8px;
     }
 
     summary {
       cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
       color: var(--muted);
-      padding: 6px 0;
+      padding: 4px 0;
       list-style: none;
       display: flex;
       align-items: center;
@@ -388,39 +503,42 @@
     summary::-webkit-details-marker { display: none; }
 
     summary:hover {
-      color: var(--fg);
+      color: var(--neon-cyan);
     }
 
     textarea {
       width: 100%;
       padding: 8px 10px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      background: var(--surface);
-      color: var(--fg);
-      font-family: inherit;
-      font-size: 12px;
+      border: 2px solid var(--outline);
+      border-radius: var(--radius-sm);
+      background: #05070a;
+      color: var(--neon-mint);
+      font-family: var(--font-mono);
+      font-size: 11px;
       resize: vertical;
       outline: none;
       margin-top: 6px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
 
     textarea:focus {
-      border-color: var(--accent);
+      border-color: var(--neon-cyan);
     }
 
-    /* Status Notifications: Compatible with setStatus(text, kind) */
+    /* Status Notifications: Driven by setStatus(text, kind) in popup.js */
     #status {
       display: block;
       margin-top: 10px;
-      padding: 8px 12px;
-      border-radius: var(--radius-md);
-      font-size: 12px;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
       line-height: 1.4;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      color: var(--muted);
+      background: var(--surface-raised);
+      border: 2px solid var(--neon-amber);
+      color: var(--neon-amber);
+      box-shadow: var(--shadow-hard-sm);
       word-break: break-word;
     }
 
@@ -429,34 +547,38 @@
     }
 
     #status.ok {
-      background: var(--success-bg);
-      border-color: var(--success);
-      color: var(--success);
+      background: #042918;
+      border-color: var(--neon-mint);
+      color: var(--neon-mint);
+      box-shadow: 0 0 10px var(--neon-mint-glow), var(--shadow-hard-sm);
       display: block;
     }
 
     #status.error {
-      background: var(--danger-soft);
-      border-color: var(--danger);
-      color: var(--danger);
+      background: #380718;
+      border-color: var(--neon-pink);
+      color: #fda4af;
+      box-shadow: 0 0 10px var(--neon-pink-glow), var(--shadow-hard-sm);
       display: block;
     }
 
     .footer {
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
-      margin-top: 10px;
+      margin-top: 12px;
       padding-top: 8px;
-      border-top: 1px solid var(--line);
-      font-size: 11px;
+      border-top: 2px dashed var(--outline);
+      font-family: var(--font-mono);
+      font-size: 10px;
       color: var(--muted);
+      letter-spacing: 0.05em;
     }
   </style>
 </head>
 <body>
 
-  <!-- Hidden radios for CSS-only tab switching -->
+  <!-- Hidden radios for CSS-only tab switching & popup.js auto-routing -->
   <input type="radio" name="tab-selection" id="tabRadioCurrent" class="tab-radio" checked>
   <input type="radio" name="tab-selection" id="tabRadioHandoff" class="tab-radio">
 
@@ -464,15 +586,18 @@
   <div class="header">
     <div class="brand">
       <div class="brand-icon">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
         </svg>
       </div>
-      <h1>Chat Handoff</h1>
+      <div class="brand-title-wrap">
+        <h1>Chat Handoff</h1>
+        <span class="brand-badge">SYS // CONTEXT_BRIDGE</span>
+      </div>
     </div>
     <div class="header-actions">
       <button id="headerSettingsBtn" class="icon-btn" title="Settings">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
@@ -480,22 +605,22 @@
     </div>
   </div>
 
-  <!-- Live Page Status Banner -->
+  <!-- Live Page Status Monitor -->
   <div class="status-pill">
     <div id="statusDot" class="status-dot"></div>
     <div class="site-text" id="siteLine">Checking this page...</div>
   </div>
 
-  <!-- Tabs Navigation (CSS-driven via labels) -->
+  <!-- Tabs Navigation -->
   <div class="tabs">
     <label for="tabRadioCurrent" class="tab-btn" id="tabCurrentBtn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
       </svg>
       Current Tab
     </label>
     <label for="tabRadioHandoff" class="tab-btn" id="tabHandoffBtn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="15 3 21 3 21 9"></polyline>
         <polyline points="9 21 3 21 3 15"></polyline>
         <line x1="21" y1="3" x2="14" y2="10"></line>
@@ -509,41 +634,42 @@
   <div class="tab-content" id="tabCurrent">
     <div class="card">
       <div class="card-title">
-        <span>Capture & AI Summary</span>
+        <span>// Actions: Active Conversation</span>
       </div>
-      <div class="btn-stack">
-        <button id="summarizeBtn" class="btn btn-primary" style="justify-content: flex-start;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
-            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-          </svg>
-          <div class="btn-text-content">
-            <span>Generate Handoff Summary</span>
-            <span class="btn-sub">Prompts AI to compress context (uses 1 msg)</span>
-          </div>
-        </button>
 
-        <button id="saveBtn" class="btn" style="justify-content: flex-start;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+      <!-- Side-by-side Action Grid -->
+      <div class="btn-grid">
+        <!-- Quick Snapshot Button -->
+        <button id="saveBtn" class="btn btn-mint" style="padding: 12px 8px; flex-direction: column; gap: 4px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
             <polyline points="17 21 17 13 7 13 7 21"></polyline>
             <polyline points="7 3 7 8 15 8"></polyline>
           </svg>
-          <div class="btn-text-content">
-            <span>Save Transcript Now</span>
-            <span class="btn-sub">Snapshot full conversation to local storage</span>
-          </div>
+          <span style="font-size: 12px; font-weight: 800;">SAVE SNAPSHOT</span>
+          <span class="btn-sub">Local transcript</span>
+        </button>
+
+        <!-- AI Summary Generator Button -->
+        <button id="summarizeBtn" class="btn btn-hero-cyan" style="padding: 12px 8px; flex-direction: column; gap: 4px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+          </svg>
+          <span style="font-size: 12px; font-weight: 800;">AI SUMMARY</span>
+          <span class="btn-sub">Compress (1 msg)</span>
         </button>
       </div>
 
-      <details style="margin-top: 10px;">
+      <!-- Backup manual summary -->
+      <details>
         <summary>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
-          Paste a summary manually
+          [+] Paste a summary manually
         </summary>
-        <textarea id="summaryBox" rows="4" placeholder="Paste the AI's summary text here..."></textarea>
-        <button id="attachSummaryBtn" class="btn" style="font-size: 12px; padding: 6px 10px;">
+        <textarea id="summaryBox" rows="3" placeholder="Paste the AI's summary text here..."></textarea>
+        <button id="attachSummaryBtn" class="btn btn-mint" style="font-size: 11px; padding: 7px 10px;">
           Attach to Selected Chat
         </button>
       </details>
@@ -552,66 +678,78 @@
 
   <!-- TAB 2: Saved & Handoff -->
   <div class="tab-content" id="tabHandoff">
+    <!-- Chat Selector Card with Integrated Trash Button -->
     <div class="card">
       <div class="card-title">
-        <span>Select Saved Chat</span>
-        <button id="deleteBtn" class="link danger" title="Delete selected chat">Delete</button>
+        <span>// Select Conversation</span>
       </div>
 
-      <div class="select-wrap">
-        <select id="chatSelect"></select>
-        <div class="select-arrow">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
+      <!-- Dropdown + Delete Trash Button inline -->
+      <div class="dropdown-row">
+        <div class="select-wrap">
+          <select id="chatSelect"></select>
+          <div class="select-arrow">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
         </div>
+        <button id="deleteBtn" class="btn-trash" title="Delete selected chat">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
       </div>
     </div>
 
+    <!-- Handoff Transfer Actions -->
     <div class="card">
       <div class="card-title">
-        <span>Continue Somewhere Else</span>
+        <span>// Handoff & Export</span>
       </div>
 
-      <button id="fillBtn" class="btn btn-primary">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Primary Hero Injection CTA -->
+      <button id="fillBtn" class="btn btn-hero-purple" style="margin-bottom: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"></line>
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
         </svg>
         <span id="fillBtnLabel">Fill into this tab's chat box</span>
       </button>
 
+      <!-- Secondary Dual Action Row: Copy & Vault -->
       <div class="btn-grid">
         <button id="copyBtn" class="btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
-          Copy Prompt
+          Copy Text
         </button>
 
         <button id="vaultBtn" class="btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
-          Save to Vault
+          Obsidian
         </button>
       </div>
 
+      <!-- Vault directory picker link -->
       <div style="margin-top: 8px; text-align: right;">
-        <button id="folderBtn" class="link">Choose Obsidian vault folder...</button>
+        <button id="folderBtn" class="link">Configure vault folder &rarr;</button>
       </div>
     </div>
   </div>
 
-  <!-- Status Notification: Matches original setStatus(text, kind) -->
+  <!-- Status Notification: Matches setStatus(text, kind) in popup.js -->
   <div id="status"></div>
 
-  <!-- Footer -->
+  <!-- Clean Footer (Redundant settings link removed) -->
   <div class="footer">
-    <span>Private & local storage</span>
-    <button id="settingsLink" class="link">Vault settings &rarr;</button>
+    <span>LOCAL_STORAGE // 100% PRIVATE</span>
   </div>
 
   <script src="shared.js"></script>
